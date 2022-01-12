@@ -1,12 +1,12 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on Dexter's Blog</title><link>https://dexter1636.github.io/posts/</link><description>Recent content in Posts on Dexter's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&lt;a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0&lt;/a></copyright><lastBuildDate>Wed, 12 Jan 2022 00:00:00 +0000</lastBuildDate><atom:link href="https://dexter1636.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>How I Build My Blog With Hugo and GitHub Pages</title><link>https://dexter1636.github.io/posts/how-i-build-my-blog-with-hugo-and-github-pages/</link><pubDate>Wed, 12 Jan 2022 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/how-i-build-my-blog-with-hugo-and-github-pages/</guid><description>This blog is about how I build my blog. It is built with Hugo and hosted in GitHub Pages.
-If you are interested in how to build your own site using Hugo and GitHub Pages, focus on the Quick Start part. Follow the given references and you can do it.
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on Dexter's Blog</title><link>https://dexter1636.github.io/posts/</link><description>Recent content in Posts on Dexter's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&lt;a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0&lt;/a></copyright><lastBuildDate>Wed, 12 Jan 2022 00:00:00 +0000</lastBuildDate><atom:link href="https://dexter1636.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>How I Build My Blog With Hugo, GitHub Pages and GitHub Actions</title><link>https://dexter1636.github.io/posts/how-i-build-my-blog-with-hugo-github-pages-and-github-actions/</link><pubDate>Wed, 12 Jan 2022 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/how-i-build-my-blog-with-hugo-github-pages-and-github-actions/</guid><description>This blog is about how I build my blog. The blog is built with Hugo and hosted in GitHub Pages.
+If you are interested in building your own site using Hugo and GitHub Pages, focus on the Quick Start part. Follow the given references and you can make it.
 Other parts are about my solutions to some problems or special requirements I faced when I built it.
-Quick Start Just follow Hugo - Quick Start and Hugo - Host on GitHub.</description><content type="html"><![CDATA[<p>This blog is about how I build my blog. It is built with Hugo and hosted in GitHub Pages.</p>
-<p>If you are interested in how to build your own site using Hugo and GitHub Pages, focus on the <code>Quick Start</code> part. Follow the given references and you can do it.</p>
+Quick Start Just follow Hugo - Quick Start and Hugo - Host on GitHub.</description><content type="html"><![CDATA[<p>This blog is about how I build my blog. The blog is built with Hugo and hosted in GitHub Pages.</p>
+<p>If you are interested in building your own site using Hugo and GitHub Pages, focus on the <code>Quick Start</code> part. Follow the given references and you can make it.</p>
 <p>Other parts are about my solutions to some problems or special requirements I faced when I built it.</p>
 <h3 id="quick-start">Quick Start</h3>
 <p>Just follow <a href="https://gohugo.io/getting-started/quick-start/">Hugo - Quick Start</a> and <a href="https://gohugo.io/hosting-and-deployment/hosting-on-github/">Hugo - Host on GitHub</a>.</p>
-<p>Also, there is an detailed blog that you may refer: <a href="https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7">Build a Personal Website With GitHub Pages and Hugo</a>.</p>
+<p>Also, there is a detailed blog that you may refer: <a href="https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7">Build a Personal Website With GitHub Pages and Hugo</a>.</p>
 <h3 id="content-organization">Content Organization</h3>
 <p>In my blog, it is like</p>
 <pre tabindex="0"><code>content/
@@ -64,7 +64,7 @@ math = true
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-toml" data-lang="toml">[<span style="color:#a6e22e">markup</span>.<span style="color:#a6e22e">goldmark</span>.<span style="color:#a6e22e">renderer</span>]
 <span style="color:#a6e22e">unsafe</span>=<span style="color:#66d9ef">true</span>
 </code></pre></div><h3 id="deploy-using-github-actions">Deploy Using GitHub Actions</h3>
-<p>GitHub executes your software development workflows. Every time you push your code on the Github repository, GitHub Actions will build the site automatically.</p>
+<p><a href="https://github.com/features/actions">GitHub Actions</a> makes it easy to build, test, and deploy your code right from GitHub, so that every time you push your code on the Github repository, GitHub Actions will build the site automatically.</p>
 <p>Create a file in <code>.github/workflows/gh-pages.yml</code> containing the following content:</p>
 <div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yml" data-lang="yml"><span style="color:#f92672">name</span>: <span style="color:#ae81ff">github pages</span>
 
@@ -105,17 +105,13 @@ math = true
         <span style="color:#f92672">with</span>:
           <span style="color:#f92672">github_token</span>: <span style="color:#ae81ff">${{ secrets.GITHUB_TOKEN }}</span>
           <span style="color:#f92672">publish_dir</span>: <span style="color:#ae81ff">./public</span>
-</code></pre></div><h3 id="reference">Reference</h3>
+</code></pre></div><p>After that, the GitHub action will push the generated content to the <code>gh-pages</code> branch once you push your code. This means GitHub has to serve your <code>gh-pages</code> branch as a GitHub Pages branch. You can change this setting by going to Settings &gt; GitHub Pages, and change the source branch to <code>gh-pages</code>.</p>
+<h3 id="reference">Reference</h3>
 <ul>
-<li>
-<p><a href="https://gohugo.io/">Hugo</a></p>
-</li>
-<li>
-<p><a href="https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7">Build a Personal Website With Github Pages and Hugo</a></p>
-</li>
-<li>
-<p><a href="https://note.qidong.name/2018/03/hugo-mathjax/">在Hugo中使用MathJax</a></p>
-</li>
+<li><a href="https://gohugo.io/">Hugo</a></li>
+<li><a href="https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7">Build a Personal Website With Github Pages and Hugo</a></li>
+<li><a href="https://note.qidong.name/2018/03/hugo-mathjax/">在Hugo中使用MathJax</a></li>
+<li><a href="https://medium.com/zendesk-engineering/a-github-actions-workflow-to-generate-publish-your-hugo-website-f36375e56cf7">A Github Actions Workflow to Generate &amp; Publish your Hugo Website</a></li>
 </ul>
 ]]></content></item><item><title>One-key Block Ciphers</title><link>https://dexter1636.github.io/posts/one-key-block-ciphers/</link><pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/one-key-block-ciphers/</guid><description>A 5-tuple $(M,C,K,E_k,D_k)$, where
 $M$: plaintext space $C$: ciphertext space $K$: key space $E_k$: Encryption transformation $D_k$: Decryption transformation Attacks Ciphertext-only attack: only know ciphertext $c$. Known-plaintext attack: know ciphertext-plaintext pair $(c,m)$. Security Requirements $E_k$ and $D_k$ are known to all. It should be computationally infeasible to determine $m$, given $c$. It should be computationally infeasible to determine $D_k$ and $k$, given $c$ and $m$. Transposition Ciphers Let $f$ be a permutation of $Z_d$.</description><content type="html"><![CDATA[<p>A 5-tuple $(M,C,K,E_k,D_k)$, where</p>
