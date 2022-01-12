@@ -103,7 +103,7 @@ A set $A$ associated with a binary operation $+$ that for any $x$, $y$, $z$ in $
 
 If $A$ is a finite set, $(A,+)$ is called a finite Abelian group.
 
-<img src="assets/B8BFEEA4A26BF8F42A0B9BA0CB6F3859-16394109251461.png" alt="img" style="zoom:33%;" />
+<img src="assets/B8BFEEA4A26BF8F42A0B9BA0CB6F3859.png" alt="img" style="zoom:33%;" />
 
 **The Abelian Group $(Z_m^n,+)$**
 
@@ -221,4 +221,8 @@ where $p(x)=x^8+x^4+x^3+x+1$.
 **Proposition:** $(GF(2^8),+,\times)$ is a finite field with $2^8$ elements.
 
 **Claim:** $S(y)=y^{2^8-2}=y^{254}$ is a permutation on $GF(2^8)$ and is highly nonlinear, and is employed in AES. Note that $S(y)=y^{-1}$ for all $y \neq 0$.
+
+### Reference
+
+Lecture slides of HKUST CSIT5710, by Prof. Cunsheng DING
 
