@@ -5,12 +5,13 @@ math = true
 type = ["posts","post"]
 tags = [
     "cryptography",
-    "security",
-    "development",
+    "web security",
+    "computer science",
 ]
 date = "2021-12-27"
 categories = [
-    "Development",
+    "Computer Science",
+    "HKUST-IT",
     "cryptography",
 ]
 series = ["CSIT5710"]
