@@ -113,7 +113,8 @@ math = true
 <li><a href="https://note.qidong.name/2018/03/hugo-mathjax/">在Hugo中使用MathJax</a></li>
 <li><a href="https://medium.com/zendesk-engineering/a-github-actions-workflow-to-generate-publish-your-hugo-website-f36375e56cf7">A Github Actions Workflow to Generate &amp; Publish your Hugo Website</a></li>
 </ul>
-]]></content></item><item><title>One-key Block Ciphers</title><link>https://dexter1636.github.io/posts/one-key-block-ciphers/</link><pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/one-key-block-ciphers/</guid><description>A 5-tuple $(M,C,K,E_k,D_k)$, where
+]]></content></item><item><title>Advanced Encryption Standard</title><link>https://dexter1636.github.io/posts/hkust-it/cryptography/advanced-encryption-standard/</link><pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/hkust-it/cryptography/advanced-encryption-standard/</guid><description>Reference Lecture slides of HKUST CSIT5710, by Prof. Cunsheng DING</description><content type="html">&lt;h3 id="reference">Reference&lt;/h3>
+&lt;p>Lecture slides of HKUST CSIT5710, by Prof. Cunsheng DING&lt;/p></content></item><item><title>One-key Block Ciphers</title><link>https://dexter1636.github.io/posts/hkust-it/cryptography/one-key-block-ciphers/</link><pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/hkust-it/cryptography/one-key-block-ciphers/</guid><description>A 5-tuple $(M,C,K,E_k,D_k)$, where
 $M$: plaintext space $C$: ciphertext space $K$: key space $E_k$: Encryption transformation $D_k$: Decryption transformation Attacks Ciphertext-only attack: only know ciphertext $c$. Known-plaintext attack: know ciphertext-plaintext pair $(c,m)$. Security Requirements $E_k$ and $D_k$ are known to all. It should be computationally infeasible to determine $m$, given $c$. It should be computationally infeasible to determine $D_k$ and $k$, given $c$ and $m$. Transposition Ciphers Let $f$ be a permutation of $Z_d$.</description><content type="html"><![CDATA[<p>A 5-tuple $(M,C,K,E_k,D_k)$, where</p>
 <ul>
 <li>$M$: plaintext space</li>
@@ -181,7 +182,7 @@ Example:</p>
 <li>$\forall x \in A$, $\exists y \in A$ such that $x+y=0$.</li>
 </ul>
 <p>If $A$ is a finite set, $(A,+)$ is called a finite Abelian group.</p>
-<img src="assets/B8BFEEA4A26BF8F42A0B9BA0CB6F3859-16394109251461.png" alt="img" style="zoom:33%;" />
+<img src="assets/B8BFEEA4A26BF8F42A0B9BA0CB6F3859.png" alt="img" style="zoom:33%;" />
 <p><strong>The Abelian Group $(Z_m^n,+)$</strong></p>
 <p><strong>Definition:</strong> Let $m \geq 2$ and $n \geq 1$ be integers. Let
 $$
@@ -256,4 +257,45 @@ where $p(x)=x^8+x^4+x^3+x+1$.</p>
 <p><strong>The Finite Field $GF(2^8)$</strong></p>
 <p><strong>Proposition:</strong> $(GF(2^8),+,\times)$ is a finite field with $2^8$ elements.</p>
 <p><strong>Claim:</strong> $S(y)=y^{2^8-2}=y^{254}$ is a permutation on $GF(2^8)$ and is highly nonlinear, and is employed in AES. Note that $S(y)=y^{-1}$ for all $y \neq 0$.</p>
+<h3 id="reference">Reference</h3>
+<p>Lecture slides of HKUST CSIT5710, by Prof. Cunsheng DING</p>
+]]></content></item><item><title>Tech Summary</title><link>https://dexter1636.github.io/posts/hkust-it/cryptography/tech-summary/</link><pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/hkust-it/cryptography/tech-summary/</guid><description>Confidentiality Service $$ Alice \rightarrow E_k(m) \rightarrow Bob $$
+Authentication and Data Integrity In PGP and S/MIME, $$ Alice \rightarrow m||Alice&amp;rsquo;s\ digital\ signiture\ on\ m \rightarrow Bob $$ In most real-world security systems, $$ Alice \rightarrow m||h_k(m) \rightarrow Bob $$
+Providing Mutual Authentication Type-1: Kerberos-like protocol, $$ Alice \rightarrow E_k(ID_A||ID_B||timestamp) \rightarrow Bob \ Alice \leftarrow E_k(ID_B||ID_A||timestamp) \leftarrow Bob $$ where $k$ is a pre-shared secret key.
+Type-2: challenge-response protocol, $$ Alice \rightarrow E_{K_e^B}(N_1) \rightarrow Bob \ Alice \leftarrow N_1 \leftarrow Bob $$ This is to allow Alice to authenticate Bob.</description><content type="html"><![CDATA[<h3 id="confidentiality-service">Confidentiality Service</h3>
+<p>$$
+Alice \rightarrow E_k(m) \rightarrow Bob
+$$</p>
+<h3 id="authentication-and-data-integrity">Authentication and Data Integrity</h3>
+<p>In PGP and S/MIME,
+$$
+Alice \rightarrow m||Alice&rsquo;s\ digital\ signiture\ on\ m \rightarrow Bob
+$$
+In most real-world security systems,
+$$
+Alice \rightarrow m||h_k(m) \rightarrow Bob
+$$</p>
+<h3 id="providing-mutual-authentication">Providing Mutual Authentication</h3>
+<p>Type-1: Kerberos-like protocol,
+$$
+Alice \rightarrow E_k(ID_A||ID_B||timestamp) \rightarrow Bob \
+Alice \leftarrow  E_k(ID_B||ID_A||timestamp) \leftarrow  Bob
+$$
+where $k$ is a pre-shared secret key.</p>
+<p>Type-2: challenge-response protocol,
+$$
+Alice \rightarrow E_{K_e^B}(N_1) \rightarrow Bob \
+Alice \leftarrow  N_1 \leftarrow Bob
+$$
+This is to allow Alice to authenticate Bob. Authentication in the other direction is similar.</p>
+<h3 id="establishing-a-common-secret-key">Establishing a Common Secret Key</h3>
+<p>Type-1: digital-envelop method,
+$$
+Alice \rightarrow E_{k_e^B}(k) \rightarrow Bob
+$$
+Type-2: Diffie-Hellman protocol,</p>
+<img src="assets/95E11BDC2AFBE38F3DBAE243B46C046B.png" alt="img" style="zoom:30%;" />
+<p>where $p$ and $\alpha$ are publicly known.</p>
+<h3 id="reference">Reference</h3>
+<p>Lecture slides of HKUST CSIT5710, by Prof. Cunsheng DING</p>
 ]]></content></item></channel></rss>
