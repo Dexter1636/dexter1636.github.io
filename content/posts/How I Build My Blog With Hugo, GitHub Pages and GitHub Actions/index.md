@@ -1,6 +1,5 @@
 +++
 title = "How I Build My Blog With Hugo, GitHub Pages and GitHub Actions"
-draft = false
 description = ""
 math = false
 type = ["posts","post"]
