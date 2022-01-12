@@ -1,0 +1,263 @@
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on Dexter's Blog</title><link>https://dexter1636.github.io/posts/</link><description>Recent content in Posts on Dexter's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&lt;a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0&lt;/a></copyright><lastBuildDate>Wed, 12 Jan 2022 00:00:00 +0000</lastBuildDate><atom:link href="https://dexter1636.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>How I Build My Blog With Hugo and GitHub Pages</title><link>https://dexter1636.github.io/posts/how-i-build-my-blog-with-hugo-and-github-pages/</link><pubDate>Wed, 12 Jan 2022 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/how-i-build-my-blog-with-hugo-and-github-pages/</guid><description>This blog is about how I build my blog. It is built with Hugo and hosted in GitHub Pages.
+If you are interested in how to build your own site using Hugo and GitHub Pages, focus on the Quick Start part. Follow the given references and you can do it.
+Other parts are about my solutions to some problems or special requirements I faced when I built it.
+Quick Start Just follow Hugo - Quick Start and Hugo - Host on GitHub.</description><content type="html"><![CDATA[<p>This blog is about how I build my blog. It is built with Hugo and hosted in GitHub Pages.</p>
+<p>If you are interested in how to build your own site using Hugo and GitHub Pages, focus on the <code>Quick Start</code> part. Follow the given references and you can do it.</p>
+<p>Other parts are about my solutions to some problems or special requirements I faced when I built it.</p>
+<h3 id="quick-start">Quick Start</h3>
+<p>Just follow <a href="https://gohugo.io/getting-started/quick-start/">Hugo - Quick Start</a> and <a href="https://gohugo.io/hosting-and-deployment/hosting-on-github/">Hugo - Host on GitHub</a>.</p>
+<p>Also, there is an detailed blog that you may refer: <a href="https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7">Build a Personal Website With GitHub Pages and Hugo</a>.</p>
+<h3 id="content-organization">Content Organization</h3>
+<p>In my blog, it is like</p>
+<pre tabindex="0"><code>content/
+├── about
+│   ├── index.md
+├── posts
+│   ├── my-post
+│   │   ├── content1.md
+│   │   ├── content2.md
+│   │   ├── image1.jpg
+│   │   ├── image2.png
+│   │   └── index.md
+│   └── my-other-post
+│       └── index.md
+│
+└── another-section
+    ├── ..
+    └── not-a-leaf-bundle
+        ├── ..
+        └── another-leaf-bundle
+            └── index.md
+</code></pre><p>See <a href="https://gohugo.io/content-management/organization/">Content Organization</a> and <a href="https://gohugo.io/content-management/page-bundles/#examples-of-leaf-bundle-organization">examples-of-leaf-bundle-organization</a> for detail.</p>
+<h3 id="enable-mathjax">Enable MathJax</h3>
+<p><a href="https://www.mathjax.org/">MathJax</a> is a JavaScript display engine for mathematics that works in all browsers.</p>
+<p>To enable MathJax, add the following code:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-toml" data-lang="toml">{{ <span style="color:#a6e22e">if</span> .<span style="color:#a6e22e">Params</span>.<span style="color:#a6e22e">math</span> }}
+<span style="color:#960050;background-color:#1e0010">&lt;</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
+  <span style="color:#a6e22e">MathJax</span> = {
+    <span style="color:#a6e22e">tex</span><span style="color:#960050;background-color:#1e0010">:</span> {
+      <span style="color:#a6e22e">inlineMath</span><span style="color:#960050;background-color:#1e0010">:</span> [[<span style="color:#e6db74">&#34;$&#34;</span>, <span style="color:#e6db74">&#34;$&#34;</span>]],
+    },
+    <span style="color:#a6e22e">displayMath</span><span style="color:#960050;background-color:#1e0010">:</span> [
+      [<span style="color:#e6db74">&#34;$$&#34;</span>, <span style="color:#e6db74">&#34;$$&#34;</span>],
+      [<span style="color:#e6db74">&#34;\[\[&#34;</span>, <span style="color:#e6db74">&#34;\]\]&#34;</span>],
+    ],
+    <span style="color:#a6e22e">svg</span><span style="color:#960050;background-color:#1e0010">:</span> {
+      <span style="color:#a6e22e">fontCache</span><span style="color:#960050;background-color:#1e0010">:</span> <span style="color:#e6db74">&#34;global&#34;</span>,
+    },
+  }<span style="color:#960050;background-color:#1e0010">;</span>
+<span style="color:#960050;background-color:#1e0010">&lt;/</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
+<span style="color:#960050;background-color:#1e0010">&lt;</span><span style="color:#a6e22e">script</span> <span style="color:#a6e22e">src</span>=<span style="color:#e6db74">&#34;https://polyfill.io/v3/polyfill.min.js?features=es6&#34;</span><span style="color:#960050;background-color:#1e0010">&gt;&lt;/</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
+<span style="color:#960050;background-color:#1e0010">&lt;</span><span style="color:#a6e22e">script</span>
+  <span style="color:#a6e22e">id</span>=<span style="color:#e6db74">&#34;MathJax-script&#34;</span>
+  <span style="color:#a6e22e">async</span>
+  <span style="color:#a6e22e">src</span>=<span style="color:#e6db74">&#34;https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js&#34;</span>
+<span style="color:#960050;background-color:#1e0010">&gt;&lt;/</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
+{{ <span style="color:#a6e22e">end</span> }}
+</code></pre></div><p>Then, in the <code>Front Matter</code> of your post:</p>
+<pre tabindex="0"><code>+++
+...
+math = true
++++
+</code></pre><h3 id="support-for-raw-html">Support for Raw HTML</h3>
+<p>If you use raw html in your markdown file, write these to your config file:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-toml" data-lang="toml">[<span style="color:#a6e22e">markup</span>.<span style="color:#a6e22e">goldmark</span>.<span style="color:#a6e22e">renderer</span>]
+<span style="color:#a6e22e">unsafe</span>=<span style="color:#66d9ef">true</span>
+</code></pre></div><h3 id="deploy-using-github-actions">Deploy Using GitHub Actions</h3>
+<p>GitHub executes your software development workflows. Every time you push your code on the Github repository, GitHub Actions will build the site automatically.</p>
+<p>Create a file in <code>.github/workflows/gh-pages.yml</code> containing the following content:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yml" data-lang="yml"><span style="color:#f92672">name</span>: <span style="color:#ae81ff">github pages</span>
+
+<span style="color:#f92672">on</span>:
+  <span style="color:#f92672">push</span>:
+    <span style="color:#f92672">branches</span>:
+      - <span style="color:#ae81ff">master </span> <span style="color:#75715e"># Set a branch to deploy</span>
+  <span style="color:#f92672">pull_request</span>:
+
+<span style="color:#f92672">jobs</span>:
+  <span style="color:#f92672">deploy</span>:
+    <span style="color:#f92672">runs-on</span>: <span style="color:#ae81ff">ubuntu-20.04</span>
+    <span style="color:#f92672">steps</span>:
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Checkout</span>
+        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/checkout@v2</span>
+        <span style="color:#f92672">with</span>:
+          <span style="color:#f92672">submodules</span>: <span style="color:#66d9ef">true</span>  <span style="color:#75715e"># Fetch Hugo themes (true OR recursive)</span>
+          <span style="color:#f92672">fetch-depth</span>: <span style="color:#ae81ff">0</span>    <span style="color:#75715e"># Fetch all history for .GitInfo and .Lastmod</span>
+
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Setup Hugo</span>
+        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">peaceiris/actions-hugo@v2</span>
+        <span style="color:#f92672">with</span>:
+          <span style="color:#f92672">hugo-version</span>: <span style="color:#e6db74">&#39;latest&#39;</span>
+          <span style="color:#f92672">extended</span>: <span style="color:#66d9ef">true</span>
+
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Clean public directory</span>
+        <span style="color:#f92672">run</span>: <span style="color:#ae81ff">rm -rf public</span>
+
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Build</span>
+        <span style="color:#f92672">run</span>: <span style="color:#ae81ff">hugo --minify</span>
+
+      <span style="color:#75715e"># - name: Create cname file  # only needed when you use a custom domain</span>
+      <span style="color:#75715e">#   run: echo &#39;freshswift.net&#39; &gt; public/CNAME</span>
+
+      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Deploy</span>
+        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">peaceiris/actions-gh-pages@v3</span>
+        <span style="color:#f92672">if</span>: <span style="color:#ae81ff">github.ref == &#39;refs/heads/master&#39;</span>
+        <span style="color:#f92672">with</span>:
+          <span style="color:#f92672">github_token</span>: <span style="color:#ae81ff">${{ secrets.GITHUB_TOKEN }}</span>
+          <span style="color:#f92672">publish_dir</span>: <span style="color:#ae81ff">./public</span>
+</code></pre></div><h3 id="reference">Reference</h3>
+<ul>
+<li>
+<p><a href="https://gohugo.io/">Hugo</a></p>
+</li>
+<li>
+<p><a href="https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7">Build a Personal Website With Github Pages and Hugo</a></p>
+</li>
+<li>
+<p><a href="https://note.qidong.name/2018/03/hugo-mathjax/">在Hugo中使用MathJax</a></p>
+</li>
+</ul>
+]]></content></item><item><title>One-key Block Ciphers</title><link>https://dexter1636.github.io/posts/one-key-block-ciphers/</link><pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/one-key-block-ciphers/</guid><description>A 5-tuple $(M,C,K,E_k,D_k)$, where
+$M$: plaintext space $C$: ciphertext space $K$: key space $E_k$: Encryption transformation $D_k$: Decryption transformation Attacks Ciphertext-only attack: only know ciphertext $c$. Known-plaintext attack: know ciphertext-plaintext pair $(c,m)$. Security Requirements $E_k$ and $D_k$ are known to all. It should be computationally infeasible to determine $m$, given $c$. It should be computationally infeasible to determine $D_k$ and $k$, given $c$ and $m$. Transposition Ciphers Let $f$ be a permutation of $Z_d$.</description><content type="html"><![CDATA[<p>A 5-tuple $(M,C,K,E_k,D_k)$, where</p>
+<ul>
+<li>$M$: plaintext space</li>
+<li>$C$: ciphertext space</li>
+<li>$K$: key space</li>
+<li>$E_k$: Encryption transformation</li>
+<li>$D_k$: Decryption transformation</li>
+</ul>
+<img src="assets/EA0B1AC4E800DDE67EDF86081AA72D1A.png" style="zoom:33%;" />
+<h4 id="attacks">Attacks</h4>
+<ul>
+<li>Ciphertext-only attack: only know ciphertext $c$.</li>
+<li>Known-plaintext attack: know ciphertext-plaintext pair $(c,m)$.</li>
+</ul>
+<h4 id="security-requirements">Security Requirements</h4>
+<ul>
+<li>$E_k$ and $D_k$ are known to all.</li>
+<li>It should be computationally infeasible to determine $m$, given $c$.</li>
+<li>It should be computationally infeasible to determine $D_k$ and $k$, given $c$ and $m$.</li>
+</ul>
+<h4 id="transposition-ciphers">Transposition Ciphers</h4>
+<p>Let $f$ be a permutation of $Z_d$.</p>
+<p>Message divided into blocks of length $d$. For each block $m=m_0 \cdots m_{d-1}$,
+$$
+E_k(m)=m_{f(0)} \cdots m_{f(d-1)}
+$$
+<img src="assets/3A59AC64ED6FFBA169C6D4F3BE795DE6.png" alt="img" style="zoom:33%;" /></p>
+<h4 id="simple-substitution-ciphers">Simple Substitution Ciphers</h4>
+<p>Let $f$ be a 1-to-1 mapping from alphabet $A$ to alphabet $B$.</p>
+<p>For message $m=m_0m_1m_2 \cdots$,
+$$
+E_k(m)=f(m_0)f(m_1)f(m_2) \cdots
+$$
+Example:</p>
+<img src="assets/E4BA6FCAD98F82926CA8D876E93219C8.png" alt="img" style="zoom:33%;" />
+<p>Security:</p>
+<ul>
+<li><strong>Insecure</strong> with both known-plaintext attacks and ciphertext-only attacks.</li>
+<li>Reason: The frequency distribution of single English letters is known.</li>
+</ul>
+<h4 id="unbreakable-ciphers">Unbreakable Ciphers</h4>
+<p>One-time pad (theoretically):</p>
+<ul>
+<li>
+<p>$m$ is a binary string.</p>
+</li>
+<li>
+<p>$k$ is a random binary string with the same length as $m$.</p>
+</li>
+<li>
+<p>$c = m\ XOR\ k$</p>
+</li>
+<li>
+<p>$k$ is used for only one message and then discarded.</p>
+</li>
+</ul>
+<h4 id="linear-and-nonlinear-functions">Linear and Nonlinear Functions</h4>
+<p><strong>Abelian group</strong></p>
+<p>A set $A$ associated with a binary operation $+$ that for any $x$, $y$, $z$ in $A$,</p>
+<ul>
+<li>$x+y \in A$</li>
+<li>$(x+y)+c=x+(y+c)$</li>
+<li>$x+y=y+x$</li>
+<li>A special element $0 \in A$ such that $0+x=x$.</li>
+<li>$\forall x \in A$, $\exists y \in A$ such that $x+y=0$.</li>
+</ul>
+<p>If $A$ is a finite set, $(A,+)$ is called a finite Abelian group.</p>
+<img src="assets/B8BFEEA4A26BF8F42A0B9BA0CB6F3859-16394109251461.png" alt="img" style="zoom:33%;" />
+<p><strong>The Abelian Group $(Z_m^n,+)$</strong></p>
+<p><strong>Definition:</strong> Let $m \geq 2$ and $n \geq 1$ be integers. Let
+$$
+Z_m^n=Z_m \times Z_m \times \cdots \times Z_m (n\ copies\ of\ Z_m)
+$$
+For any two elements
+$$
+x=(x_1,x_2, \cdots ,x_n) \in Z_m^n,\ y=(y_1,y_2, \cdots ,y_n) \in Z_m^n,
+$$
+define
+$$
+x+y=(x_1 \oplus_m y_1,x_2 \oplus_m y_2, \cdots ,x_n \oplus_m y_n) \in Z_m^n
+$$
+<strong>Proposition:</strong> $(Z_m^n,+)$ is an Abelian group with $m^n$ elements.</p>
+<p><strong>Linear and Affine Functions</strong></p>
+<p>$f:A \rightarrow B$ is <strong>linear</strong> if and only if $f(x+y)=f(x)+f(y)$.</p>
+<p>$g:A \rightarrow B$ is <strong>affine</strong> if and only if $g=f+b$, where constant $b \in B$.</p>
+<p><strong>Nonlinear Functions</strong></p>
+<p>Any function that is not affine.</p>
+<p><strong>Linear and Nonlinear Functions</strong></p>
+<p>Both of linear and nonlinear functions are needed in many cryptographic systems as basic building blocks.</p>
+<h4 id="diffusion-and-confusion">Diffusion and Confusion</h4>
+<p><strong>Diffusion</strong></p>
+<p>The minimum number of bits affected in $c$ by changing one bit in $m$ over the total number of bits in $c$.</p>
+<img src="assets/9F222E5EDCA1319F910A442ACB87F718.png" alt="img" style="zoom:33%;" />
+<p>Linear functions usually provides diffusion.</p>
+<p><strong>Confusion</strong></p>
+<p>The complexity of the relations between the ciphertext-bit and the plaintext-bit and the key bits.</p>
+<p>Nonlinear functions usually provides confusion.</p>
+<p>With bad confusion (linear function for example), it is easy to solve $k$ given $(c,m)$.</p>
+<h4 id="the-iterative-design-paradigm">The Iterative Design Paradigm</h4>
+<p>In order to let $E_k$ and $D_k$</p>
+<ul>
+<li>good in diffusion and confusion</li>
+<li>computationally fast</li>
+</ul>
+<p>we could design a simple function $f_k$ and define
+$$
+E_k(m)=f_{k_{16}}(f_{k_{15}}( \cdots f_{k_2}(f_{k_1}(m)) \cdots ))
+$$
+where $k_1$, $k_2$, &hellip; and $k_{16}$ are binary string computed from $k$ according to an algorithm.</p>
+<p>Most ciphers are designed with this approach.</p>
+<h4 id="the-finite-field-gf28">The Finite Field $GF(2^8)$</h4>
+<p><strong>Polynomials over $GF(2)$</strong></p>
+<p><strong>Notation:</strong> $GF(2)=Z_2$, only 0 and 1, operations $\oplus_2$ and $\otimes_2$.</p>
+<p><strong>Polynomials over $GF(2)$:</strong> $a(x)=a_0+a_1x+a_2x^2+ \cdots +a_nx^n$, where $a_i \in GF(2)$.</p>
+<p><strong>Irreducible polynomial:</strong> $p(x)=x^8+x^4+x^3+x+1 \in GF(2)[x]$, which means $p(x)$ cannot be expressed as the product of two polynomials over $GF(2)$ with smaller degrees, just like a prime.</p>
+<p><strong>An reducible polynomial over $GF(2)$:</strong> $x^4+x^3+x+1=(x+1)^2(x^2+x+1)$.</p>
+<p><strong>The Elements in $GF(2^8)$</strong></p>
+<p>All the polynomials that
+$$
+a(x)=a_0+a_1x+a_2x^2+a_3x^3+a_4x^4+a_5x^5+a_6x^6+a_7x^7 \in GF(2)[x]
+$$
+where $a_i \in {0,1}$. Hence $GF(2^8)$ has $2^8$ elements.</p>
+<p><strong>The Addition Operation of $GF(2^8)$</strong></p>
+<p>For any two elements
+$$
+a(x)=a_0+a_1x+a_2x^2+ \cdots +a_7x^7,\ \ b(x)=b_0+b_1x+b_2x^2+ \cdots +b_7x^7,
+$$
+their addition is defined by
+$$
+a(x)+b(x)= \sum_{i=0}^7 (a_i+b_i)x^i \in GF(2^8)
+$$
+<strong>Proposition:</strong> $(GF(2^8),+)$ is an abelian group with identity 0.</p>
+<p><strong>The Multiplication Operation of $GF(2^8)$</strong>
+$$
+a(x) \times b(x)=a(x)b(x)\ mod\ p(x) \in GF(2^8)
+$$
+where $p(x)=x^8+x^4+x^3+x+1$.</p>
+<p><strong>Proposition:</strong> $(GF(2^8),\times)$ is an abelian group with identity 1.</p>
+<img src="assets/9FEE4D2995AC39B5E3B2CDF19D55DA09.png" alt="img" style="zoom:33%;" />
+<p><strong>The Finite Field $GF(2^8)$</strong></p>
+<p><strong>Proposition:</strong> $(GF(2^8),+,\times)$ is a finite field with $2^8$ elements.</p>
+<p><strong>Claim:</strong> $S(y)=y^{2^8-2}=y^{254}$ is a permutation on $GF(2^8)$ and is highly nonlinear, and is employed in AES. Note that $S(y)=y^{-1}$ for all $y \neq 0$.</p>
+]]></content></item></channel></rss>
