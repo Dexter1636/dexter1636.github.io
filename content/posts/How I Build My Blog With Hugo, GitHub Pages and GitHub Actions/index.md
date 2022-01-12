@@ -1,5 +1,5 @@
 +++
-title = "How I Build My Blog With Hugo and GitHub Pages"
+title = "How I Build My Blog With Hugo, GitHub Pages and GitHub Actions"
 draft = false
 description = ""
 math = false
@@ -15,11 +15,12 @@ categories = [
 series = []
 [ author ]
   name = "Dexter"
+
 +++
 
-This blog is about how I build my blog. It is built with Hugo and hosted in GitHub Pages.
+This blog is about how I build my blog. The blog is built with Hugo and hosted in GitHub Pages.
 
-If you are interested in how to build your own site using Hugo and GitHub Pages, focus on the `Quick Start` part. Follow the given references and you can do it.
+If you are interested in building your own site using Hugo and GitHub Pages, focus on the `Quick Start` part. Follow the given references and you can make it.
 
 Other parts are about my solutions to some problems or special requirements I faced when I built it.
 
@@ -27,7 +28,7 @@ Other parts are about my solutions to some problems or special requirements I fa
 
 Just follow [Hugo - Quick Start](https://gohugo.io/getting-started/quick-start/) and [Hugo - Host on GitHub](https://gohugo.io/hosting-and-deployment/hosting-on-github/).
 
-Also, there is an detailed blog that you may refer: [Build a Personal Website With GitHub Pages and Hugo](https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7).
+Also, there is a detailed blog that you may refer: [Build a Personal Website With GitHub Pages and Hugo](https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7).
 
 ### Content Organization
 
@@ -108,7 +109,7 @@ unsafe=true
 
 ### Deploy Using GitHub Actions
 
-GitHub executes your software development workflows. Every time you push your code on the Github repository, GitHub Actions will build the site automatically.
+[GitHub Actions](https://github.com/features/actions) makes it easy to build, test, and deploy your code right from GitHub, so that every time you push your code on the Github repository, GitHub Actions will build the site automatically.
 
 Create a file in `.github/workflows/gh-pages.yml` containing the following content:
 
@@ -154,11 +155,11 @@ jobs:
           publish_dir: ./public
 ```
 
-
+After that, the GitHub action will push the generated content to the `gh-pages` branch once you push your code. This means GitHub has to serve your `gh-pages` branch as a GitHub Pages branch. You can change this setting by going to Settings > GitHub Pages, and change the source branch to `gh-pages`.
 
 ### Reference
 
 - [Hugo](https://gohugo.io/)
-
 - [Build a Personal Website With Github Pages and Hugo](https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7)
 - [在Hugo中使用MathJax](https://note.qidong.name/2018/03/hugo-mathjax/)
+- [A Github Actions Workflow to Generate & Publish your Hugo Website](https://medium.com/zendesk-engineering/a-github-actions-workflow-to-generate-publish-your-hugo-website-f36375e56cf7)
