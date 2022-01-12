@@ -1,6 +1,7 @@
 +++
 title = "Advanced Encryption Standard"
 description = ""
+draft = true
 math = true
 type = ["posts","post"]
 tags = [
@@ -17,6 +18,7 @@ categories = [
 series = ["CSIT5710"]
 [ author ]
   name = "Dexter"
+
 +++
 
 ### Reference
