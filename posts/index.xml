@@ -32,80 +32,80 @@ Quick Start Just follow Hugo - Quick Start and Hugo - Host on GitHub.</descripti
 <h3 id="enable-mathjax">Enable MathJax</h3>
 <p><a href="https://www.mathjax.org/">MathJax</a> is a JavaScript display engine for mathematics that works in all browsers.</p>
 <p>To enable MathJax, add the following code:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-toml" data-lang="toml">{{ <span style="color:#a6e22e">if</span> .<span style="color:#a6e22e">Params</span>.<span style="color:#a6e22e">math</span> }}
-<span style="color:#960050;background-color:#1e0010">&lt;</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
-  <span style="color:#a6e22e">MathJax</span> = {
-    <span style="color:#a6e22e">tex</span><span style="color:#960050;background-color:#1e0010">:</span> {
-      <span style="color:#a6e22e">inlineMath</span><span style="color:#960050;background-color:#1e0010">:</span> [[<span style="color:#e6db74">&#34;$&#34;</span>, <span style="color:#e6db74">&#34;$&#34;</span>]],
-    },
-    <span style="color:#a6e22e">displayMath</span><span style="color:#960050;background-color:#1e0010">:</span> [
-      [<span style="color:#e6db74">&#34;$$&#34;</span>, <span style="color:#e6db74">&#34;$$&#34;</span>],
-      [<span style="color:#e6db74">&#34;\[\[&#34;</span>, <span style="color:#e6db74">&#34;\]\]&#34;</span>],
-    ],
-    <span style="color:#a6e22e">svg</span><span style="color:#960050;background-color:#1e0010">:</span> {
-      <span style="color:#a6e22e">fontCache</span><span style="color:#960050;background-color:#1e0010">:</span> <span style="color:#e6db74">&#34;global&#34;</span>,
-    },
-  }<span style="color:#960050;background-color:#1e0010">;</span>
-<span style="color:#960050;background-color:#1e0010">&lt;/</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
-<span style="color:#960050;background-color:#1e0010">&lt;</span><span style="color:#a6e22e">script</span> <span style="color:#a6e22e">src</span>=<span style="color:#e6db74">&#34;https://polyfill.io/v3/polyfill.min.js?features=es6&#34;</span><span style="color:#960050;background-color:#1e0010">&gt;&lt;/</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
-<span style="color:#960050;background-color:#1e0010">&lt;</span><span style="color:#a6e22e">script</span>
-  <span style="color:#a6e22e">id</span>=<span style="color:#e6db74">&#34;MathJax-script&#34;</span>
-  <span style="color:#a6e22e">async</span>
-  <span style="color:#a6e22e">src</span>=<span style="color:#e6db74">&#34;https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js&#34;</span>
-<span style="color:#960050;background-color:#1e0010">&gt;&lt;/</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
-{{ <span style="color:#a6e22e">end</span> }}
-</code></pre></div><p>Then, in the <code>Front Matter</code> of your post:</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>{{ <span style="color:#a6e22e">if</span> .<span style="color:#a6e22e">Params</span>.<span style="color:#a6e22e">math</span> }}
+</span></span><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010">&lt;</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">MathJax</span> = {
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">tex</span><span style="color:#960050;background-color:#1e0010">:</span> {
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">inlineMath</span><span style="color:#960050;background-color:#1e0010">:</span> [[<span style="color:#e6db74">&#34;$&#34;</span>, <span style="color:#e6db74">&#34;$&#34;</span>]],
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">displayMath</span><span style="color:#960050;background-color:#1e0010">:</span> [
+</span></span><span style="display:flex;"><span>      [<span style="color:#e6db74">&#34;$$&#34;</span>, <span style="color:#e6db74">&#34;$$&#34;</span>],
+</span></span><span style="display:flex;"><span>      [<span style="color:#e6db74">&#34;\[\[&#34;</span>, <span style="color:#e6db74">&#34;\]\]&#34;</span>],
+</span></span><span style="display:flex;"><span>    ],
+</span></span><span style="display:flex;"><span>    <span style="color:#a6e22e">svg</span><span style="color:#960050;background-color:#1e0010">:</span> {
+</span></span><span style="display:flex;"><span>      <span style="color:#a6e22e">fontCache</span><span style="color:#960050;background-color:#1e0010">:</span> <span style="color:#e6db74">&#34;global&#34;</span>,
+</span></span><span style="display:flex;"><span>    },
+</span></span><span style="display:flex;"><span>  }<span style="color:#960050;background-color:#1e0010">;</span>
+</span></span><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010">&lt;/</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
+</span></span><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010">&lt;</span><span style="color:#a6e22e">script</span> <span style="color:#a6e22e">src</span>=<span style="color:#e6db74">&#34;https://polyfill.io/v3/polyfill.min.js?features=es6&#34;</span><span style="color:#960050;background-color:#1e0010">&gt;&lt;/</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
+</span></span><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010">&lt;</span><span style="color:#a6e22e">script</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">id</span>=<span style="color:#e6db74">&#34;MathJax-script&#34;</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">async</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#a6e22e">src</span>=<span style="color:#e6db74">&#34;https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js&#34;</span>
+</span></span><span style="display:flex;"><span><span style="color:#960050;background-color:#1e0010">&gt;&lt;/</span><span style="color:#a6e22e">script</span><span style="color:#960050;background-color:#1e0010">&gt;</span>
+</span></span><span style="display:flex;"><span>{{ <span style="color:#a6e22e">end</span> }}
+</span></span></code></pre></div><p>Then, in the <code>Front Matter</code> of your post:</p>
 <pre tabindex="0"><code>+++
 ...
 math = true
 +++
 </code></pre><h3 id="support-for-raw-html">Support for Raw HTML</h3>
 <p>If you use raw html in your markdown file, write these to your config file:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-toml" data-lang="toml">[<span style="color:#a6e22e">markup</span>.<span style="color:#a6e22e">goldmark</span>.<span style="color:#a6e22e">renderer</span>]
-<span style="color:#a6e22e">unsafe</span>=<span style="color:#66d9ef">true</span>
-</code></pre></div><h3 id="deploy-using-github-actions">Deploy Using GitHub Actions</h3>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-toml" data-lang="toml"><span style="display:flex;"><span>[<span style="color:#a6e22e">markup</span>.<span style="color:#a6e22e">goldmark</span>.<span style="color:#a6e22e">renderer</span>]
+</span></span><span style="display:flex;"><span><span style="color:#a6e22e">unsafe</span>=<span style="color:#66d9ef">true</span>
+</span></span></code></pre></div><h3 id="deploy-using-github-actions">Deploy Using GitHub Actions</h3>
 <p><a href="https://github.com/features/actions">GitHub Actions</a> makes it easy to build, test, and deploy your code right from GitHub, so that every time you push your code on the Github repository, GitHub Actions will build the site automatically.</p>
 <p>Create a file in <code>.github/workflows/gh-pages.yml</code> containing the following content:</p>
-<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yml" data-lang="yml"><span style="color:#f92672">name</span>: <span style="color:#ae81ff">github pages</span>
-
-<span style="color:#f92672">on</span>:
-  <span style="color:#f92672">push</span>:
-    <span style="color:#f92672">branches</span>:
-      - <span style="color:#ae81ff">master </span> <span style="color:#75715e"># Set a branch to deploy</span>
-  <span style="color:#f92672">pull_request</span>:
-
-<span style="color:#f92672">jobs</span>:
-  <span style="color:#f92672">deploy</span>:
-    <span style="color:#f92672">runs-on</span>: <span style="color:#ae81ff">ubuntu-20.04</span>
-    <span style="color:#f92672">steps</span>:
-      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Checkout</span>
-        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/checkout@v2</span>
-        <span style="color:#f92672">with</span>:
-          <span style="color:#f92672">submodules</span>: <span style="color:#66d9ef">true</span>  <span style="color:#75715e"># Fetch Hugo themes (true OR recursive)</span>
-          <span style="color:#f92672">fetch-depth</span>: <span style="color:#ae81ff">0</span>    <span style="color:#75715e"># Fetch all history for .GitInfo and .Lastmod</span>
-
-      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Setup Hugo</span>
-        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">peaceiris/actions-hugo@v2</span>
-        <span style="color:#f92672">with</span>:
-          <span style="color:#f92672">hugo-version</span>: <span style="color:#e6db74">&#39;latest&#39;</span>
-          <span style="color:#f92672">extended</span>: <span style="color:#66d9ef">true</span>
-
-      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Clean public directory</span>
-        <span style="color:#f92672">run</span>: <span style="color:#ae81ff">rm -rf public</span>
-
-      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Build</span>
-        <span style="color:#f92672">run</span>: <span style="color:#ae81ff">hugo --minify</span>
-
-      <span style="color:#75715e"># - name: Create cname file  # only needed when you use a custom domain</span>
-      <span style="color:#75715e">#   run: echo &#39;freshswift.net&#39; &gt; public/CNAME</span>
-
-      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Deploy</span>
-        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">peaceiris/actions-gh-pages@v3</span>
-        <span style="color:#f92672">if</span>: <span style="color:#ae81ff">github.ref == &#39;refs/heads/master&#39;</span>
-        <span style="color:#f92672">with</span>:
-          <span style="color:#f92672">github_token</span>: <span style="color:#ae81ff">${{ secrets.GITHUB_TOKEN }}</span>
-          <span style="color:#f92672">publish_dir</span>: <span style="color:#ae81ff">./public</span>
-</code></pre></div><p>After that, the GitHub action will push the generated content to the <code>gh-pages</code> branch once you push your code. This means GitHub has to serve your <code>gh-pages</code> branch as a GitHub Pages branch. You can change this setting by going to Settings &gt; GitHub Pages, and change the source branch to <code>gh-pages</code>.</p>
+<div class="highlight"><pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;"><code class="language-yml" data-lang="yml"><span style="display:flex;"><span><span style="color:#f92672">name</span>: <span style="color:#ae81ff">github pages</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">on</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">push</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">branches</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#ae81ff">master </span> <span style="color:#75715e"># Set a branch to deploy</span>
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">pull_request</span>:
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span><span style="color:#f92672">jobs</span>:
+</span></span><span style="display:flex;"><span>  <span style="color:#f92672">deploy</span>:
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">runs-on</span>: <span style="color:#ae81ff">ubuntu-20.04</span>
+</span></span><span style="display:flex;"><span>    <span style="color:#f92672">steps</span>:
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Checkout</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">actions/checkout@v2</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">with</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">submodules</span>: <span style="color:#66d9ef">true</span>  <span style="color:#75715e"># Fetch Hugo themes (true OR recursive)</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">fetch-depth</span>: <span style="color:#ae81ff">0</span>    <span style="color:#75715e"># Fetch all history for .GitInfo and .Lastmod</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Setup Hugo</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">peaceiris/actions-hugo@v2</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">with</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">hugo-version</span>: <span style="color:#e6db74">&#39;latest&#39;</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">extended</span>: <span style="color:#66d9ef">true</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Clean public directory</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">run</span>: <span style="color:#ae81ff">rm -rf public</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Build</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">run</span>: <span style="color:#ae81ff">hugo --minify</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>      <span style="color:#75715e"># - name: Create cname file  # only needed when you use a custom domain</span>
+</span></span><span style="display:flex;"><span>      <span style="color:#75715e">#   run: echo &#39;freshswift.net&#39; &gt; public/CNAME</span>
+</span></span><span style="display:flex;"><span>
+</span></span><span style="display:flex;"><span>      - <span style="color:#f92672">name</span>: <span style="color:#ae81ff">Deploy</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">uses</span>: <span style="color:#ae81ff">peaceiris/actions-gh-pages@v3</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">if</span>: <span style="color:#ae81ff">github.ref == &#39;refs/heads/master&#39;</span>
+</span></span><span style="display:flex;"><span>        <span style="color:#f92672">with</span>:
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">github_token</span>: <span style="color:#ae81ff">${{ secrets.GITHUB_TOKEN }}</span>
+</span></span><span style="display:flex;"><span>          <span style="color:#f92672">publish_dir</span>: <span style="color:#ae81ff">./public</span>
+</span></span></code></pre></div><p>After that, the GitHub action will push the generated content to the <code>gh-pages</code> branch once you push your code. This means GitHub has to serve your <code>gh-pages</code> branch as a GitHub Pages branch. You can change this setting by going to Settings &gt; GitHub Pages, and change the source branch to <code>gh-pages</code>.</p>
 <h3 id="reference">Reference</h3>
 <ul>
 <li><a href="https://gohugo.io/">Hugo</a></li>
