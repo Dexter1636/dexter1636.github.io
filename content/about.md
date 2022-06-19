@@ -1,6 +1,5 @@
 +++
 title = "About"
-date = "2022-01-12"
 aliases = ["about-me","contact"]
 [ author ]
   name = "Dexter"
@@ -9,6 +8,6 @@ aliases = ["about-me","contact"]
 
 Coder.
 
-Student at HKUST.
+Student at HKUST & intern at Bytedance.
 
-Currently looking for a job / internship.
+Currently looking for a full-time job.
