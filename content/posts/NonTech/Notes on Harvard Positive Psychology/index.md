@@ -1,5 +1,5 @@
 +++
-title = "Harvard Positive Psychology"
+title = "Notes on Harvard Positive Psychology"
 description = ""
 draft = false
 math = false
