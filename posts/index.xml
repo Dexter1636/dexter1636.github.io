@@ -1,4 +1,72 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on Dexter's Blog</title><link>https://dexter1636.github.io/posts/</link><description>Recent content in Posts on Dexter's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&lt;a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0&lt;/a></copyright><lastBuildDate>Wed, 12 Jan 2022 00:00:00 +0000</lastBuildDate><atom:link href="https://dexter1636.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>How I Build My Blog With Hugo, GitHub Pages and GitHub Actions</title><link>https://dexter1636.github.io/posts/others/how-i-build-my-blog-with-hugo-github-pages-and-github-actions/</link><pubDate>Wed, 12 Jan 2022 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/others/how-i-build-my-blog-with-hugo-github-pages-and-github-actions/</guid><description>This blog is about how I build my blog. The blog is built with Hugo and hosted in GitHub Pages.
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Posts on Dexter's Blog</title><link>https://dexter1636.github.io/posts/</link><description>Recent content in Posts on Dexter's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&lt;a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0&lt;/a></copyright><lastBuildDate>Sun, 19 Jun 2022 00:00:00 +0000</lastBuildDate><atom:link href="https://dexter1636.github.io/posts/index.xml" rel="self" type="application/rss+xml"/><item><title>Notes on Harvard Positive Psychology</title><link>https://dexter1636.github.io/posts/nontech/notes-on-harvard-positive-psychology/</link><pubDate>Sun, 19 Jun 2022 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/nontech/notes-on-harvard-positive-psychology/</guid><description>Content Introduction
+Premises
+Beliefs
+Focus
+Change
+Goal Setting
+Perfection
+Health
+Relationship
+Self-esteem
+Final
+Introduction Extraordinary successful students of Harvard MBAs They really believe in themselves. The sense of confidence. They thought they could do well. They were driven. They were motivated. They thought &amp;ldquo;I&amp;rsquo;m going to make it, I&amp;rsquo;m going to succeed.&amp;rdquo; They were always asking questions. Always asking questions, initially of their boss, later of their employees, of their partner, children, parents, friends, they were always asking question.</description><content type="html"><![CDATA[<h2 id="content">Content</h2>
+<ol>
+<li>
+<p>Introduction</p>
+</li>
+<li>
+<p>Premises</p>
+</li>
+<li>
+<p>Beliefs</p>
+</li>
+<li>
+<p>Focus</p>
+</li>
+<li>
+<p>Change</p>
+</li>
+<li>
+<p>Goal Setting</p>
+</li>
+<li>
+<p>Perfection</p>
+</li>
+<li>
+<p>Health</p>
+</li>
+<li>
+<p>Relationship</p>
+</li>
+<li>
+<p>Self-esteem</p>
+</li>
+<li>
+<p>Final</p>
+</li>
+</ol>
+<h2 id="introduction">Introduction</h2>
+<h3 id="extraordinary-successful-students-of-harvard-mbas">Extraordinary successful students of Harvard MBAs</h3>
+<ol>
+<li><strong>They really believe in themselves. The sense of confidence.</strong>
+<ul>
+<li>They thought they could do well. They were driven. They were motivated. They thought &ldquo;I&rsquo;m going to make it, I&rsquo;m going to succeed.&rdquo;</li>
+</ul>
+</li>
+<li><strong>They were always asking questions.</strong>
+<ul>
+<li>Always asking questions, initially of their boss, later of their employees, of their partner, children, parents, friends, they were always asking question. They are always at the state of curiosity, always looking up, opening up, wanting to understand the world more. They didn&rsquo;t say &ldquo;Now I have my MBA. That&rsquo;s it. I know enough.&rdquo; They were life-long learners. They were always asking questions.</li>
+</ul>
+</li>
+</ol>
+<h3 id="change">Change</h3>
+<p>Change is the most important thing. Do work your talk. Give a due time to write down your change, so that you need to change before that time.</p>
+<p>TBC&hellip;</p>
+<h2 id="reference">Reference</h2>
+<ul>
+<li><a href="https://www.bilibili.com/video/BV1kx411S7ZU">Bilibili - 【哈佛大学公开课】幸福课（积极心理学）【心理学】</a></li>
+</ul>
+]]></content></item><item><title>How I Build My Blog With Hugo, GitHub Pages and GitHub Actions</title><link>https://dexter1636.github.io/posts/others/how-i-build-my-blog-with-hugo-github-pages-and-github-actions/</link><pubDate>Wed, 12 Jan 2022 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/others/how-i-build-my-blog-with-hugo-github-pages-and-github-actions/</guid><description>This blog is about how I build my blog. The blog is built with Hugo and hosted in GitHub Pages.
 If you are interested in building your own site using Hugo and GitHub Pages, focus on the Quick Start part. Follow the given references and you can make it.
 Other parts are about my solutions to some problems or special requirements I faced when I built it.
 Quick Start Just follow Hugo - Quick Start and Hugo - Host on GitHub.</description><content type="html"><![CDATA[<p>This blog is about how I build my blog. The blog is built with Hugo and hosted in GitHub Pages.</p>
