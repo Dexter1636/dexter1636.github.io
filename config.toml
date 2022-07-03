@@ -25,7 +25,7 @@ buildExpired = false
 canonifyURLs = true
 
 enableRobotsTXT = true
-enableGitInfo   = false
+enableGitInfo   = true
 enableEmoji     = true
 enableMissingTranslationPlaceholders = false
 disableRSS     = false
@@ -180,6 +180,10 @@ unsafe= true
   # [[params.social]]
   #   name = "stackoverflow"
   #   url  = "https://www.stackoverflow.com/"
+
+[frontmatter]
+  date = ["date", "publishDate", "lastmod"]
+  lastmod = [":git", "lastmod", "date", "publishDate"]
 
 [languages]
   [languages.en]
