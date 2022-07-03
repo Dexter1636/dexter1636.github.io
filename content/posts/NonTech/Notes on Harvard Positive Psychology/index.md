@@ -65,6 +65,12 @@ Change is the most important thing. Do work your talk. Give a due time to write 
 
 
 
+### Find "fit"
+
+You would be exposed to many theories and many ideas in this class. Not everything will be right for you. You'll be exposed to it, you'll try it, and then you'll make up your mind "Yes, this is what I want to incorporate." or "No, this is just not relevant for me."
+
+
+
 TBC...
 
 
