@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Database on Dexter's Blog</title><link>https://dexter1636.github.io/categories/database/</link><description>Recent content in Database on Dexter's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&lt;a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0&lt;/a></copyright><lastBuildDate>Sat, 05 Feb 2022 00:00:00 +0000</lastBuildDate><atom:link href="https://dexter1636.github.io/categories/database/index.xml" rel="self" type="application/rss+xml"/><item><title>数据库事务</title><link>https://dexter1636.github.io/posts/others/%E6%95%B0%E6%8D%AE%E5%BA%93%E4%BA%8B%E5%8A%A1/</link><pubDate>Sat, 05 Feb 2022 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/others/%E6%95%B0%E6%8D%AE%E5%BA%93%E4%BA%8B%E5%8A%A1/</guid><description>目录 基本概念 ACID 单对象与多对象操作 弱隔离级别 已提交读（Read Committed） 快照隔离和可重复读（Snapshot Isolation and Repeatable Read） 防止丢失更新（Preventing Lost Updates） 写偏差和幻读（Write Skew and Phantoms） 可序列化（Serializability） 真的串行执行（Actual Serial Execution） 两阶段锁（2PL, Two-Phase Locking） 可序列化快照隔离（SSI, Serializable Snapshot Isolation） 小结 附录：常见事务并发问题的基本概念整理 Reference 基本概念 数据库系统可能出现各种错误，包括软硬件故障，网络故障，并发故障等等。我们需要保证发生这些故障时数据的正确性。
+数十年来，事务一直是简化这些问题的首选机制。 事务是将多个读写操作组合成一个逻辑单元的一种方式，整个事务被视作单个操作来进行，要么全部成功（commit），要么全部失败（abort，rollback）。 这样一来，事务就给予了我们一定程度上的安全保证，使得我们不用担心部分失败的情况，以及部分并发问题。
+ACID 原子性（Atomicity） 事务的所有操作要么全部成功，要么全部失败。
+一致性（Consistency） 对数据的一组特定陈述必须始终成立。
+例如，在会计系统中，所有账户整体上必须借贷相抵。
+隔离性（Isolation） 同时执行的事务是相互隔离的，它们不能互相影响。
+隔离性用于防止并发问题。
+持久性（Durability） 一旦事务提交，其所做的修改会永远保存到数据库中。
+综合理解 原子性和隔离性保证了一致性。
+持久性保证数据不会丢失。
+单对象与多对象操作 概念 单对象操作是指在一个事务中只对单个对象进行了操作，多对象操作是指在一个事务中对数据库中的多个对象进行了操作。
+单对象写入 可能发生的错误：丢失更新（lost update）。
+因此需要保证原子性和隔离性。其中原子性可以通过undo日志来保证，隔离性可以通过给对象上锁来保证。
+一些数据库也提供更复杂的原子操作，比如自增操作，这样就不需要“读取-修改-写入”的操作序列了。另一种解决办法是使用CAS操作。
+多对象事务 有些情况下一个事务需要对多个对象进行读写操作。
+例如一个邮件系统，emails表存储邮件，mailboxs表存储用户的未读邮件数量。当用户收到新邮件时，可能会产生下面的错误（脏读）。
+错误处理与中止 错误处理与中止（abort）保证了事务的原子性。如果发生错误，事务可以中止并被安全地重试。
+然而，错误处理与中止机制也存在它的问题：
+如果事务实际上成功了，但是在服务器试图向客户端确认提交成功时网络发生故障（所以客户端认为提交失败了），那么重试事务会导致事务被执行两次，除非你有一个额外的应用级除重机制。 如果错误是由于负载过大造成的，则重试事务将使问题变得更糟，而不是更好。为了避免这种正反馈循环，可以限制重试次数，使用指数退避算法，并单独处理与过载相关的错误（如果允许）。 仅在临时性错误（例如，由于死锁，异常情况，临时性网络中断和故障切换）后才值得重试。在发生永久性错误（例如，违反约束）之后重试是毫无意义的。 如果事务在数据库之外也有副作用，即使事务被中止，也可能发生这些副作用。例如，副作用是发送电子邮件，那你肯定不希望每次重试事务时都重新发送电子邮件。如果你想确保几个不同的系统一起提交或放弃，可以使用两阶段提交（2PC, two-phase commit）。 如果客户端进程在重试中失效，任何试图写入数据库的数据都将丢失。 弱隔离级别 数据库提供事务隔离（transaction isolation）来隐藏应用程序开发者的并发问题。但是，隔离级别越高，系统性能就越低，所以我们通常使用较弱的隔离级别来防止一部分，而不是全部的并发问题。</description></item></channel></rss>
