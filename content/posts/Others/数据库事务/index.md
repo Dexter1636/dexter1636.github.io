@@ -432,7 +432,7 @@ Stored procedure 在之前经常被批评：
 
 #### 小结
 
-在特定条件下，Actual Serial Execution 已经成为一种可序列化个理解别的实现方法。
+在特定条件下，Actual Serial Execution 已经成为一种可序列化隔离级别的实现方法。
 
 - 每个事务都小而快，因为一个慢事务会阻塞所有事务。
 - 活跃数据集可放入内存。
