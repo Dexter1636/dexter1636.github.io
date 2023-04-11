@@ -71,6 +71,42 @@ You would be exposed to many theories and many ideas in this class. Not everythi
 
 
 
+## Premises
+
+
+
+### The permission to be human
+
+Active acceptance.
+
+Understanding certain things I cannot change, and certain things I can and ought to change.
+
+> God, grant me the serenity to accept the things I cannot change, the courage to change the things I can change, and the wisdom to know the difference.
+>
+> -- <cite>Reinhold Niebuhr</cite>
+
+The A, B, C of psychology:
+
+- Affect: emotion
+- Behavior: action
+- Cognition: thoughts
+
+Affect is there, just like the law of gravity is there. That does not mean we need to accept our behavior and our cognition.
+
+For example, I can envy toward my best friend, but that does not make me a bad person. It's human. Envy is part of human nature. Nothing good or bad about the envy (affect / emotion). The question is how do I choose to behave, to act as a result of it. I can have moral or immoral behavior toward my best friend. I can still experience envy toward my best friend, and choose to behave generously and benevolently toward him. The same with the cognition.
+
+I can feel the certain way (affect / emotion), but it doesn't mean that I need to resign to my thoughts about the feeling.
+
+As for experience, meditation is a great way to experience the permission to be human.
+
+- Shift the focus of your thought to your breathing.
+- Repeat deep breath.
+- Shift your focus to your emotions, to your feelings. Whatever they are, allow it to flow through you naturally. It's all okay, just breathe.
+
+> Hint: The meditation is at the last part of lecture 4.
+
+
+
 TBC...
 
 
