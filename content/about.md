@@ -8,6 +8,4 @@ aliases = ["about-me","contact"]
 
 Coder.
 
-Student at HKUST & intern at ByteDance.
-
-Currently looking for a full-time job.
+HKUST graduate & Java software engineer at Alibaba.
