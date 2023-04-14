@@ -27,8 +27,14 @@ function detectOSColorTheme() {
 function switchTheme(e) {
   if (chosenThemeIsDark) {
     localStorage.setItem("theme", "light");
-  } else {
+  } else if (chosenThemeIsLight) {
     localStorage.setItem("theme", "dark");
+  } else {
+    if (document.documentElement.getAttribute("data-theme") == "dark") {
+      localStorage.setItem("theme", "light");
+    } else {
+      localStorage.setItem("theme", "dark");
+    }
   }
 
   detectOSColorTheme();
