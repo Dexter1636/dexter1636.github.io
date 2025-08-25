@@ -1,1 +1,3 @@
 User-agent: *
+Disallow:
+Sitemap: https://dexter1636.github.io/sitemap.xml

@@ -1,5 +1,78 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>HKUST-IT on Dexter's Blog</title><link>https://dexter1636.github.io/categories/hkust-it/</link><description>Recent content in HKUST-IT on Dexter's Blog</description><generator>Hugo -- gohugo.io</generator><language>en-us</language><copyright>&lt;a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">CC BY-NC 4.0&lt;/a></copyright><lastBuildDate>Mon, 27 Dec 2021 00:00:00 +0000</lastBuildDate><atom:link href="https://dexter1636.github.io/categories/hkust-it/index.xml" rel="self" type="application/rss+xml"/><item><title>One-key Block Ciphers</title><link>https://dexter1636.github.io/posts/hkust-it/cryptography/one-key-block-ciphers/</link><pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/hkust-it/cryptography/one-key-block-ciphers/</guid><description>A 5-tuple $(M,C,K,E_k,D_k)$, where
-$M$: plaintext space $C$: ciphertext space $K$: key space $E_k$: Encryption transformation $D_k$: Decryption transformation Attacks Ciphertext-only attack: only know ciphertext $c$. Known-plaintext attack: know ciphertext-plaintext pair $(c,m)$. Security Requirements $E_k$ and $D_k$ are known to all. It should be computationally infeasible to determine $m$, given $c$. It should be computationally infeasible to determine $D_k$ and $k$, given $c$ and $m$. Transposition Ciphers Let $f$ be a permutation of $Z_d$.</description></item><item><title>Tech Summary</title><link>https://dexter1636.github.io/posts/hkust-it/cryptography/tech-summary/</link><pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate><guid>https://dexter1636.github.io/posts/hkust-it/cryptography/tech-summary/</guid><description>Confidentiality Service $$ Alice \rightarrow E_k(m) \rightarrow Bob $$
-Authentication and Data Integrity In PGP and S/MIME, $$ Alice \rightarrow m||Alice&amp;rsquo;s\ digital\ signiture\ on\ m \rightarrow Bob $$ In most real-world security systems, $$ Alice \rightarrow m||h_k(m) \rightarrow Bob $$
-Providing Mutual Authentication Type-1: Kerberos-like protocol, $$ Alice \rightarrow E_k(ID_A||ID_B||timestamp) \rightarrow Bob \ Alice \leftarrow E_k(ID_B||ID_A||timestamp) \leftarrow Bob $$ where $k$ is a pre-shared secret key.
-Type-2: challenge-response protocol, $$ Alice \rightarrow E_{K_e^B}(N_1) \rightarrow Bob \ Alice \leftarrow N_1 \leftarrow Bob $$ This is to allow Alice to authenticate Bob.</description></item></channel></rss>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>HKUST-IT on Dexter&#39;s Blog</title>
+    <link>https://dexter1636.github.io/categories/hkust-it/</link>
+    <description>Recent content in HKUST-IT on Dexter&#39;s Blog</description>
+    <image>
+      <title>Dexter&#39;s Blog</title>
+      <url>https://dexter1636.github.io/images/papermod-cover.png</url>
+      <link>https://dexter1636.github.io/images/papermod-cover.png</link>
+    </image>
+    <generator>Hugo -- 0.148.2</generator>
+    <language>en</language>
+    <copyright>2025 Dexter · CC BY-NC 4.0</copyright>
+    <lastBuildDate>Mon, 25 Aug 2025 19:04:39 +0800</lastBuildDate>
+    <atom:link href="https://dexter1636.github.io/categories/hkust-it/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>One-key Block Ciphers</title>
+      <link>https://dexter1636.github.io/posts/hkust-it/cryptography/one-key-block-ciphers/</link>
+      <pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate>
+      <guid>https://dexter1636.github.io/posts/hkust-it/cryptography/one-key-block-ciphers/</guid>
+      <description>&lt;p&gt;A 5-tuple $(M,C,K,E_k,D_k)$, where&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;$M$: plaintext space&lt;/li&gt;
+&lt;li&gt;$C$: ciphertext space&lt;/li&gt;
+&lt;li&gt;$K$: key space&lt;/li&gt;
+&lt;li&gt;$E_k$: Encryption transformation&lt;/li&gt;
+&lt;li&gt;$D_k$: Decryption transformation&lt;/li&gt;
+&lt;/ul&gt;
+&lt;img src=&#34;assets/EA0B1AC4E800DDE67EDF86081AA72D1A.png&#34; style=&#34;zoom:33%;&#34; /&gt;
+&lt;h4 id=&#34;attacks&#34;&gt;Attacks&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;Ciphertext-only attack: only know ciphertext $c$.&lt;/li&gt;
+&lt;li&gt;Known-plaintext attack: know ciphertext-plaintext pair $(c,m)$.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4 id=&#34;security-requirements&#34;&gt;Security Requirements&lt;/h4&gt;
+&lt;ul&gt;
+&lt;li&gt;$E_k$ and $D_k$ are known to all.&lt;/li&gt;
+&lt;li&gt;It should be computationally infeasible to determine $m$, given $c$.&lt;/li&gt;
+&lt;li&gt;It should be computationally infeasible to determine $D_k$ and $k$, given $c$ and $m$.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h4 id=&#34;transposition-ciphers&#34;&gt;Transposition Ciphers&lt;/h4&gt;
+&lt;p&gt;Let $f$ be a permutation of $Z_d$.&lt;/p&gt;</description>
+    </item>
+    <item>
+      <title>Tech Summary</title>
+      <link>https://dexter1636.github.io/posts/hkust-it/cryptography/tech-summary/</link>
+      <pubDate>Mon, 27 Dec 2021 00:00:00 +0000</pubDate>
+      <guid>https://dexter1636.github.io/posts/hkust-it/cryptography/tech-summary/</guid>
+      <description>&lt;h3 id=&#34;confidentiality-service&#34;&gt;Confidentiality Service&lt;/h3&gt;
+&lt;p&gt;$$
+Alice \rightarrow E_k(m) \rightarrow Bob
+$$&lt;/p&gt;
+&lt;h3 id=&#34;authentication-and-data-integrity&#34;&gt;Authentication and Data Integrity&lt;/h3&gt;
+&lt;p&gt;In PGP and S/MIME,
+$$
+Alice \rightarrow m||Alice&amp;rsquo;s\ digital\ signiture\ on\ m \rightarrow Bob
+$$
+In most real-world security systems,
+$$
+Alice \rightarrow m||h_k(m) \rightarrow Bob
+$$&lt;/p&gt;
+&lt;h3 id=&#34;providing-mutual-authentication&#34;&gt;Providing Mutual Authentication&lt;/h3&gt;
+&lt;p&gt;Type-1: Kerberos-like protocol,
+$$
+Alice \rightarrow E_k(ID_A||ID_B||timestamp) \rightarrow Bob \
+Alice \leftarrow  E_k(ID_B||ID_A||timestamp) \leftarrow  Bob
+$$
+where $k$ is a pre-shared secret key.&lt;/p&gt;
+&lt;p&gt;Type-2: challenge-response protocol,
+$$
+Alice \rightarrow E_{K_e^B}(N_1) \rightarrow Bob \
+Alice \leftarrow  N_1 \leftarrow Bob
+$$
+This is to allow Alice to authenticate Bob. Authentication in the other direction is similar.&lt;/p&gt;</description>
+    </item>
+  </channel>
+</rss>

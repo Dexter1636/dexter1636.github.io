@@ -1,0 +1,1548 @@
+<!doctype html><html lang=en dir=auto><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content="IE=edge"><meta name=viewport content="width=device-width,initial-scale=1,shrink-to-fit=no"><meta name=robots content="index, follow"><title>MCP: Build Rich-Context AI Apps with Anthropic | Dexter's Blog</title><meta name=keywords content="MCP,AI"><meta name=description content='Introduction
+MCP is an open protocol that standardizes how applications provide context to large language models (LLMs).
+
+Why MCP
+
+
+
+
+MCP Architecture
+graph TB
+    subgraph "MCP Host (AI Application)"
+        Client1["MCP Client 1"]
+        Client2["MCP Client 2"]
+        Client3["MCP Client 3"]
+    end
+
+    Server1["MCP Server 1<br/>(e.g., Sentry)"]
+    Server2["MCP Server 2<br/>(e.g., Filesystem)"]
+    Server3["MCP Server 3<br/>(e.g., Database)"]
+
+    Client1 ---|"One-to-one<br/>connection"| Server1
+    Client2 ---|"One-to-one<br/>connection"| Server2
+    Client3 ---|"One-to-one<br/>connection"| Server3
+
+    style Client1 fill:#e1f5fe
+    style Client2 fill:#e1f5fe
+    style Client3 fill:#e1f5fe
+    style Server1 fill:#f3e5f5
+    style Server2 fill:#f3e5f5
+    style Server3 fill:#f3e5f5
+
+
+
+
+
+
+
+
+
+Creating an MCP Client and an MCP Server
+From Function Call to MCP
+
+Whole Picture
+
+
+Tools/Resources/Prompts Discovery and Invocation
+
+
+
+
+
+
+
+
+
+
+
+
+Client Source Code
+from dotenv import load_dotenv
+from anthropic import Anthropic
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from contextlib import AsyncExitStack
+import json
+import asyncio
+import nest_asyncio
+
+nest_asyncio.apply()
+
+load_dotenv()
+
+class MCP_ChatBot:
+    def __init__(self):
+        self.exit_stack = AsyncExitStack()
+        self.anthropic = Anthropic()
+        # Tools list required for Anthropic API
+        self.available_tools = []
+        # Prompts list for quick display 
+        self.available_prompts = []
+        # Sessions dict maps tool/prompt names or resource URIs to MCP client sessions
+        self.sessions = {}
+
+    async def connect_to_server(self, server_name, server_config):
+        try:
+            server_params = StdioServerParameters(**server_config)
+            stdio_transport = await self.exit_stack.enter_async_context(
+                stdio_client(server_params)
+            )
+            read, write = stdio_transport
+            session = await self.exit_stack.enter_async_context(
+                ClientSession(read, write)
+            )
+            await session.initialize()
+            
+            
+            try:
+                # List available tools
+                response = await session.list_tools()
+                for tool in response.tools:
+                    self.sessions[tool.name] = session
+                    self.available_tools.append({
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.inputSchema
+                    })
+            
+                # List available prompts
+                prompts_response = await session.list_prompts()
+                if prompts_response and prompts_response.prompts:
+                    for prompt in prompts_response.prompts:
+                        self.sessions[prompt.name] = session
+                        self.available_prompts.append({
+                            "name": prompt.name,
+                            "description": prompt.description,
+                            "arguments": prompt.arguments
+                        })
+                # List available resources
+                resources_response = await session.list_resources()
+                if resources_response and resources_response.resources:
+                    for resource in resources_response.resources:
+                        resource_uri = str(resource.uri)
+                        self.sessions[resource_uri] = session
+            
+            except Exception as e:
+                print(f"Error {e}")
+                
+        except Exception as e:
+            print(f"Error connecting to {server_name}: {e}")
+
+    async def connect_to_servers(self):
+        try:
+            with open("server_config.json", "r") as file:
+                data = json.load(file)
+            servers = data.get("mcpServers", {})
+            for server_name, server_config in servers.items():
+                await self.connect_to_server(server_name, server_config)
+        except Exception as e:
+            print(f"Error loading server config: {e}")
+            raise
+    
+    async def process_query(self, query):
+        messages = [{&#39;role&#39;:&#39;user&#39;, &#39;content&#39;:query}]
+        
+        while True:
+            response = self.anthropic.messages.create(
+                max_tokens = 2024,
+                model = &#39;claude-3-7-sonnet-20250219&#39;, 
+                tools = self.available_tools,
+                messages = messages
+            )
+            
+            assistant_content = []
+            has_tool_use = False
+            
+            for content in response.content:
+                if content.type == &#39;text&#39;:
+                    print(content.text)
+                    assistant_content.append(content)
+                elif content.type == &#39;tool_use&#39;:
+                    has_tool_use = True
+                    assistant_content.append(content)
+                    messages.append({&#39;role&#39;:&#39;assistant&#39;, &#39;content&#39;:assistant_content})
+                    
+                    # Get session and call tool
+                    session = self.sessions.get(content.name)
+                    if not session:
+                        print(f"Tool &#39;{content.name}&#39; not found.")
+                        break
+                        
+                    result = await session.call_tool(content.name, arguments=content.input)
+                    messages.append({
+                        "role": "user", 
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": content.id,
+                                "content": result.content
+                            }
+                        ]
+                    })
+            
+            # Exit loop if no tool was used
+            if not has_tool_use:
+                break
+
+    async def get_resource(self, resource_uri):
+        session = self.sessions.get(resource_uri)
+        
+        # Fallback for papers URIs - try any papers resource session
+        if not session and resource_uri.startswith("papers://"):
+            for uri, sess in self.sessions.items():
+                if uri.startswith("papers://"):
+                    session = sess
+                    break
+            
+        if not session:
+            print(f"Resource &#39;{resource_uri}&#39; not found.")
+            return
+        
+        try:
+            result = await session.read_resource(uri=resource_uri)
+            if result and result.contents:
+                print(f"\nResource: {resource_uri}")
+                print("Content:")
+                print(result.contents[0].text)
+            else:
+                print("No content available.")
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    async def list_prompts(self):
+        """List all available prompts."""
+        if not self.available_prompts:
+            print("No prompts available.")
+            return
+        
+        print("\nAvailable prompts:")
+        for prompt in self.available_prompts:
+            print(f"- {prompt[&#39;name&#39;]}: {prompt[&#39;description&#39;]}")
+            if prompt[&#39;arguments&#39;]:
+                print(f"  Arguments:")
+                for arg in prompt[&#39;arguments&#39;]:
+                    arg_name = arg.name if hasattr(arg, &#39;name&#39;) else arg.get(&#39;name&#39;, &#39;&#39;)
+                    print(f"    - {arg_name}")
+    
+    async def execute_prompt(self, prompt_name, args):
+        """Execute a prompt with the given arguments."""
+        session = self.sessions.get(prompt_name)
+        if not session:
+            print(f"Prompt &#39;{prompt_name}&#39; not found.")
+            return
+        
+        try:
+            result = await session.get_prompt(prompt_name, arguments=args)
+            if result and result.messages:
+                prompt_content = result.messages[0].content
+                
+                # Extract text from content (handles different formats)
+                if isinstance(prompt_content, str):
+                    text = prompt_content
+                elif hasattr(prompt_content, &#39;text&#39;):
+                    text = prompt_content.text
+                else:
+                    # Handle list of content items
+                    text = " ".join(item.text if hasattr(item, &#39;text&#39;) else str(item) 
+                                  for item in prompt_content)
+                
+                print(f"\nExecuting prompt &#39;{prompt_name}&#39;...")
+                await self.process_query(text)
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    async def chat_loop(self):
+        print("\nMCP Chatbot Started!")
+        print("Type your queries or &#39;quit&#39; to exit.")
+        print("Use @folders to see available topics")
+        print("Use @<topic> to search papers in that topic")
+        print("Use /prompts to list available prompts")
+        print("Use /prompt <name> <arg1=value1> to execute a prompt")
+        
+        while True:
+            try:
+                query = input("\nQuery: ").strip()
+                if not query:
+                    continue
+        
+                if query.lower() == &#39;quit&#39;:
+                    break
+                
+                # Check for @resource syntax first
+                if query.startswith(&#39;@&#39;):
+                    # Remove @ sign  
+                    topic = query[1:]
+                    if topic == "folders":
+                        resource_uri = "papers://folders"
+                    else:
+                        resource_uri = f"papers://{topic}"
+                    await self.get_resource(resource_uri)
+                    continue
+                
+                # Check for /command syntax
+                if query.startswith(&#39;/&#39;):
+                    parts = query.split()
+                    command = parts[0].lower()
+                    
+                    if command == &#39;/prompts&#39;:
+                        await self.list_prompts()
+                    elif command == &#39;/prompt&#39;:
+                        if len(parts) < 2:
+                            print("Usage: /prompt <name> <arg1=value1> <arg2=value2>")
+                            continue
+                        
+                        prompt_name = parts[1]
+                        args = {}
+                        
+                        # Parse arguments
+                        for arg in parts[2:]:
+                            if &#39;=&#39; in arg:
+                                key, value = arg.split(&#39;=&#39;, 1)
+                                args[key] = value
+                        
+                        await self.execute_prompt(prompt_name, args)
+                    else:
+                        print(f"Unknown command: {command}")
+                    continue
+                
+                await self.process_query(query)
+                    
+            except Exception as e:
+                print(f"\nError: {str(e)}")
+    
+    async def cleanup(self):
+        await self.exit_stack.aclose()
+
+
+async def main():
+    chatbot = MCP_ChatBot()
+    try:
+        await chatbot.connect_to_servers()
+        await chatbot.chat_loop()
+    finally:
+        await chatbot.cleanup()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+SSE Remote Server Source Code
+import arxiv
+import json
+import os
+from typing import List
+from mcp.server.fastmcp import FastMCP
+
+PAPER_DIR = "papers"
+
+# Initialize FastMCP server
+mcp = FastMCP("research", port=8001)
+
+@mcp.tool()
+def search_papers(topic: str, max_results: int = 5) -> List[str]:
+    """
+    Search for papers on arXiv based on a topic and store their information.
+    
+    Args:
+        topic: The topic to search for
+        max_results: Maximum number of results to retrieve (default: 5)
+        
+    Returns:
+        List of paper IDs found in the search
+    """
+    
+    # Use arxiv to find the papers 
+    client = arxiv.Client()
+
+    # Search for the most relevant articles matching the queried topic
+    search = arxiv.Search(
+        query = topic,
+        max_results = max_results,
+        sort_by = arxiv.SortCriterion.Relevance
+    )
+
+    papers = client.results(search)
+    
+    # Create directory for this topic
+    path = os.path.join(PAPER_DIR, topic.lower().replace(" ", "_"))
+    os.makedirs(path, exist_ok=True)
+    
+    file_path = os.path.join(path, "papers_info.json")
+
+    # Try to load existing papers info
+    try:
+        with open(file_path, "r") as json_file:
+            papers_info = json.load(json_file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        papers_info = {}
+
+    # Process each paper and add to papers_info  
+    paper_ids = []
+    for paper in papers:
+        paper_ids.append(paper.get_short_id())
+        paper_info = {
+            &#39;title&#39;: paper.title,
+            &#39;authors&#39;: [author.name for author in paper.authors],
+            &#39;summary&#39;: paper.summary,
+            &#39;pdf_url&#39;: paper.pdf_url,
+            &#39;published&#39;: str(paper.published.date())
+        }
+        papers_info[paper.get_short_id()] = paper_info
+    
+    # Save updated papers_info to json file
+    with open(file_path, "w") as json_file:
+        json.dump(papers_info, json_file, indent=2)
+    
+    print(f"Results are saved in: {file_path}")
+    
+    return paper_ids
+
+@mcp.tool()
+def extract_info(paper_id: str) -> str:
+    """
+    Search for information about a specific paper across all topic directories.
+    
+    Args:
+        paper_id: The ID of the paper to look for
+        
+    Returns:
+        JSON string with paper information if found, error message if not found
+    """
+ 
+    for item in os.listdir(PAPER_DIR):
+        item_path = os.path.join(PAPER_DIR, item)
+        if os.path.isdir(item_path):
+            file_path = os.path.join(item_path, "papers_info.json")
+            if os.path.isfile(file_path):
+                try:
+                    with open(file_path, "r") as json_file:
+                        papers_info = json.load(json_file)
+                        if paper_id in papers_info:
+                            return json.dumps(papers_info[paper_id], indent=2)
+                except (FileNotFoundError, json.JSONDecodeError) as e:
+                    print(f"Error reading {file_path}: {str(e)}")
+                    continue
+    
+    return f"There&#39;s no saved information related to paper {paper_id}."
+
+
+
+@mcp.resource("papers://folders")
+def get_available_folders() -> str:
+    """
+    List all available topic folders in the papers directory.
+    
+    This resource provides a simple list of all available topic folders.
+    """
+    folders = []
+    
+    # Get all topic directories
+    if os.path.exists(PAPER_DIR):
+        for topic_dir in os.listdir(PAPER_DIR):
+            topic_path = os.path.join(PAPER_DIR, topic_dir)
+            if os.path.isdir(topic_path):
+                papers_file = os.path.join(topic_path, "papers_info.json")
+                if os.path.exists(papers_file):
+                    folders.append(topic_dir)
+    
+    # Create a simple markdown list
+    content = "# Available Topics\n\n"
+    if folders:
+        for folder in folders:
+            content += f"- {folder}\n"
+        content += f"\nUse @{folder} to access papers in that topic.\n"
+    else:
+        content += "No topics found.\n"
+    
+    return content
+
+@mcp.resource("papers://{topic}")
+def get_topic_papers(topic: str) -> str:
+    """
+    Get detailed information about papers on a specific topic.
+    
+    Args:
+        topic: The research topic to retrieve papers for
+    """
+    topic_dir = topic.lower().replace(" ", "_")
+    papers_file = os.path.join(PAPER_DIR, topic_dir, "papers_info.json")
+    
+    if not os.path.exists(papers_file):
+        return f"# No papers found for topic: {topic}\n\nTry searching for papers on this topic first."
+    
+    try:
+        with open(papers_file, &#39;r&#39;) as f:
+            papers_data = json.load(f)
+        
+        # Create markdown content with paper details
+        content = f"# Papers on {topic.replace(&#39;_&#39;, &#39; &#39;).title()}\n\n"
+        content += f"Total papers: {len(papers_data)}\n\n"
+        
+        for paper_id, paper_info in papers_data.items():
+            content += f"## {paper_info[&#39;title&#39;]}\n"
+            content += f"- **Paper ID**: {paper_id}\n"
+            content += f"- **Authors**: {&#39;, &#39;.join(paper_info[&#39;authors&#39;])}\n"
+            content += f"- **Published**: {paper_info[&#39;published&#39;]}\n"
+            content += f"- **PDF URL**: [{paper_info[&#39;pdf_url&#39;]}]({paper_info[&#39;pdf_url&#39;]})\n\n"
+            content += f"### Summary\n{paper_info[&#39;summary&#39;][:500]}...\n\n"
+            content += "---\n\n"
+        
+        return content
+    except json.JSONDecodeError:
+        return f"# Error reading papers data for {topic}\n\nThe papers data file is corrupted."
+
+@mcp.prompt()
+def generate_search_prompt(topic: str, num_papers: int = 5) -> str:
+    """Generate a prompt for Claude to find and discuss academic papers on a specific topic."""
+    return f"""Search for {num_papers} academic papers about &#39;{topic}&#39; using the search_papers tool. 
+
+    Follow these instructions:
+    1. First, search for papers using search_papers(topic=&#39;{topic}&#39;, max_results={num_papers})
+    2. For each paper found, extract and organize the following information:
+       - Paper title
+       - Authors
+       - Publication date
+       - Brief summary of the key findings
+       - Main contributions or innovations
+       - Methodologies used
+       - Relevance to the topic &#39;{topic}&#39;
+    
+    3. Provide a comprehensive summary that includes:
+       - Overview of the current state of research in &#39;{topic}&#39;
+       - Common themes and trends across the papers
+       - Key research gaps or areas for future investigation
+       - Most impactful or influential papers in this area
+    
+    4. Organize your findings in a clear, structured format with headings and bullet points for easy readability.
+    
+    Please present both detailed information about each paper and a high-level synthesis of the research landscape in {topic}."""
+
+if __name__ == "__main__":
+    # Initialize and run the server
+    mcp.run(transport=&#39;sse&#39;)
+Reference
+DeepLearning.AI - MCP: Build Rich-Context AI Apps with Anthropic'><meta name=author content="Dexter"><link rel=canonical href=https://dexter1636.github.io/posts/aicourses/mcp-build-rich-context-ai-apps-with-anthropic/><link crossorigin=anonymous href=/assets/css/stylesheet.8fe10233a706bc87f2e08b3cf97b8bd4c0a80f10675a143675d59212121037c0.css integrity="sha256-j+ECM6cGvIfy4Is8+XuL1MCoDxBnWhQ2ddWSEhIQN8A=" rel="preload stylesheet" as=style><link rel=icon href=https://dexter1636.github.io/favicon.ico><link rel=icon type=image/png sizes=16x16 href=https://dexter1636.github.io/favicon-16x16.png><link rel=icon type=image/png sizes=32x32 href=https://dexter1636.github.io/favicon-32x32.png><link rel=apple-touch-icon href=https://dexter1636.github.io/apple-touch-icon.png><link rel=mask-icon href=https://dexter1636.github.io/safari-pinned-tab.svg><meta name=theme-color content="#2e2e33"><meta name=msapplication-TileColor content="#2e2e33"><link rel=alternate hreflang=en href=https://dexter1636.github.io/posts/aicourses/mcp-build-rich-context-ai-apps-with-anthropic/><noscript><style>#theme-toggle,.top-link{display:none}</style><style>@media(prefers-color-scheme:dark){:root{--theme:rgb(29, 30, 32);--entry:rgb(46, 46, 51);--primary:rgb(218, 218, 219);--secondary:rgb(155, 156, 157);--tertiary:rgb(65, 66, 68);--content:rgb(196, 196, 197);--code-block-bg:rgb(46, 46, 51);--code-bg:rgb(55, 56, 62);--border:rgb(51, 51, 51)}.list{background:var(--theme)}.list:not(.dark)::-webkit-scrollbar-track{background:0 0}.list:not(.dark)::-webkit-scrollbar-thumb{border-color:var(--theme)}}</style></noscript><script src=https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js></script><script>const elementCode=".mermaid",loadMermaid=function(e){mermaid.initialize({theme:e}),mermaid.init({theme:e},document.querySelectorAll(elementCode))},saveOriginalData=function(){return new Promise((e,t)=>{try{var n=document.querySelectorAll(elementCode),s=n.length;n.forEach(t=>{t.setAttribute("data-original-code",t.innerHTML),s--,s==0&&e()})}catch(e){t(e)}})},resetProcessed=function(){return new Promise((e,t)=>{try{var n=document.querySelectorAll(elementCode),s=n.length;n.forEach(t=>{t.getAttribute("data-original-code")!=null&&(t.removeAttribute("data-processed"),t.innerHTML=t.getAttribute("data-original-code")),s--,s==0&&e()})}catch(e){t(e)}})};saveOriginalData().catch(console.error);let statusTheme=localStorage.getItem("pref-theme");statusTheme=="dark"&&resetProcessed().then(loadMermaid("dark")).catch(console.error),statusTheme=="light"&&resetProcessed().then(loadMermaid("neutral")).catch(console.error),document.getElementById("theme-toggle").addEventListener("click",()=>{resetProcessed().then(loadMermaid(mermaid.mermaidAPI.getConfig().theme=="neutral"?"dark":"neutral")).catch(console.error)})</script><meta property="og:url" content="https://dexter1636.github.io/posts/aicourses/mcp-build-rich-context-ai-apps-with-anthropic/"><meta property="og:site_name" content="Dexter's Blog"><meta property="og:title" content="MCP: Build Rich-Context AI Apps with Anthropic"><meta property="og:description" content='Introduction MCP is an open protocol that standardizes how applications provide context to large language models (LLMs).
+Why MCP MCP Architecture graph TB subgraph "MCP Host (AI Application)" Client1["MCP Client 1"] Client2["MCP Client 2"] Client3["MCP Client 3"] end Server1["MCP Server 1<br/>(e.g., Sentry)"] Server2["MCP Server 2<br/>(e.g., Filesystem)"] Server3["MCP Server 3<br/>(e.g., Database)"] Client1 ---|"One-to-one<br/>connection"| Server1 Client2 ---|"One-to-one<br/>connection"| Server2 Client3 ---|"One-to-one<br/>connection"| Server3 style Client1 fill:#e1f5fe style Client2 fill:#e1f5fe style Client3 fill:#e1f5fe style Server1 fill:#f3e5f5 style Server2 fill:#f3e5f5 style Server3 fill:#f3e5f5 Creating an MCP Client and an MCP Server From Function Call to MCP Whole Picture Tools/Resources/Prompts Discovery and Invocation Client Source Code from dotenv import load_dotenv from anthropic import Anthropic from mcp import ClientSession, StdioServerParameters from mcp.client.stdio import stdio_client from contextlib import AsyncExitStack import json import asyncio import nest_asyncio nest_asyncio.apply() load_dotenv() class MCP_ChatBot: def __init__(self): self.exit_stack = AsyncExitStack() self.anthropic = Anthropic() # Tools list required for Anthropic API self.available_tools = [] # Prompts list for quick display self.available_prompts = [] # Sessions dict maps tool/prompt names or resource URIs to MCP client sessions self.sessions = {} async def connect_to_server(self, server_name, server_config): try: server_params = StdioServerParameters(**server_config) stdio_transport = await self.exit_stack.enter_async_context( stdio_client(server_params) ) read, write = stdio_transport session = await self.exit_stack.enter_async_context( ClientSession(read, write) ) await session.initialize() try: # List available tools response = await session.list_tools() for tool in response.tools: self.sessions[tool.name] = session self.available_tools.append({ "name": tool.name, "description": tool.description, "input_schema": tool.inputSchema }) # List available prompts prompts_response = await session.list_prompts() if prompts_response and prompts_response.prompts: for prompt in prompts_response.prompts: self.sessions[prompt.name] = session self.available_prompts.append({ "name": prompt.name, "description": prompt.description, "arguments": prompt.arguments }) # List available resources resources_response = await session.list_resources() if resources_response and resources_response.resources: for resource in resources_response.resources: resource_uri = str(resource.uri) self.sessions[resource_uri] = session except Exception as e: print(f"Error {e}") except Exception as e: print(f"Error connecting to {server_name}: {e}") async def connect_to_servers(self): try: with open("server_config.json", "r") as file: data = json.load(file) servers = data.get("mcpServers", {}) for server_name, server_config in servers.items(): await self.connect_to_server(server_name, server_config) except Exception as e: print(f"Error loading server config: {e}") raise async def process_query(self, query): messages = [{&#39;role&#39;:&#39;user&#39;, &#39;content&#39;:query}] while True: response = self.anthropic.messages.create( max_tokens = 2024, model = &#39;claude-3-7-sonnet-20250219&#39;, tools = self.available_tools, messages = messages ) assistant_content = [] has_tool_use = False for content in response.content: if content.type == &#39;text&#39;: print(content.text) assistant_content.append(content) elif content.type == &#39;tool_use&#39;: has_tool_use = True assistant_content.append(content) messages.append({&#39;role&#39;:&#39;assistant&#39;, &#39;content&#39;:assistant_content}) # Get session and call tool session = self.sessions.get(content.name) if not session: print(f"Tool &#39;{content.name}&#39; not found.") break result = await session.call_tool(content.name, arguments=content.input) messages.append({ "role": "user", "content": [ { "type": "tool_result", "tool_use_id": content.id, "content": result.content } ] }) # Exit loop if no tool was used if not has_tool_use: break async def get_resource(self, resource_uri): session = self.sessions.get(resource_uri) # Fallback for papers URIs - try any papers resource session if not session and resource_uri.startswith("papers://"): for uri, sess in self.sessions.items(): if uri.startswith("papers://"): session = sess break if not session: print(f"Resource &#39;{resource_uri}&#39; not found.") return try: result = await session.read_resource(uri=resource_uri) if result and result.contents: print(f"\nResource: {resource_uri}") print("Content:") print(result.contents[0].text) else: print("No content available.") except Exception as e: print(f"Error: {e}") async def list_prompts(self): """List all available prompts.""" if not self.available_prompts: print("No prompts available.") return print("\nAvailable prompts:") for prompt in self.available_prompts: print(f"- {prompt[&#39;name&#39;]}: {prompt[&#39;description&#39;]}") if prompt[&#39;arguments&#39;]: print(f" Arguments:") for arg in prompt[&#39;arguments&#39;]: arg_name = arg.name if hasattr(arg, &#39;name&#39;) else arg.get(&#39;name&#39;, &#39;&#39;) print(f" - {arg_name}") async def execute_prompt(self, prompt_name, args): """Execute a prompt with the given arguments.""" session = self.sessions.get(prompt_name) if not session: print(f"Prompt &#39;{prompt_name}&#39; not found.") return try: result = await session.get_prompt(prompt_name, arguments=args) if result and result.messages: prompt_content = result.messages[0].content # Extract text from content (handles different formats) if isinstance(prompt_content, str): text = prompt_content elif hasattr(prompt_content, &#39;text&#39;): text = prompt_content.text else: # Handle list of content items text = " ".join(item.text if hasattr(item, &#39;text&#39;) else str(item) for item in prompt_content) print(f"\nExecuting prompt &#39;{prompt_name}&#39;...") await self.process_query(text) except Exception as e: print(f"Error: {e}") async def chat_loop(self): print("\nMCP Chatbot Started!") print("Type your queries or &#39;quit&#39; to exit.") print("Use @folders to see available topics") print("Use @<topic> to search papers in that topic") print("Use /prompts to list available prompts") print("Use /prompt <name> <arg1=value1> to execute a prompt") while True: try: query = input("\nQuery: ").strip() if not query: continue if query.lower() == &#39;quit&#39;: break # Check for @resource syntax first if query.startswith(&#39;@&#39;): # Remove @ sign topic = query[1:] if topic == "folders": resource_uri = "papers://folders" else: resource_uri = f"papers://{topic}" await self.get_resource(resource_uri) continue # Check for /command syntax if query.startswith(&#39;/&#39;): parts = query.split() command = parts[0].lower() if command == &#39;/prompts&#39;: await self.list_prompts() elif command == &#39;/prompt&#39;: if len(parts) < 2: print("Usage: /prompt <name> <arg1=value1> <arg2=value2>") continue prompt_name = parts[1] args = {} # Parse arguments for arg in parts[2:]: if &#39;=&#39; in arg: key, value = arg.split(&#39;=&#39;, 1) args[key] = value await self.execute_prompt(prompt_name, args) else: print(f"Unknown command: {command}") continue await self.process_query(query) except Exception as e: print(f"\nError: {str(e)}") async def cleanup(self): await self.exit_stack.aclose() async def main(): chatbot = MCP_ChatBot() try: await chatbot.connect_to_servers() await chatbot.chat_loop() finally: await chatbot.cleanup() if __name__ == "__main__": asyncio.run(main()) SSE Remote Server Source Code import arxiv import json import os from typing import List from mcp.server.fastmcp import FastMCP PAPER_DIR = "papers" # Initialize FastMCP server mcp = FastMCP("research", port=8001) @mcp.tool() def search_papers(topic: str, max_results: int = 5) -> List[str]: """ Search for papers on arXiv based on a topic and store their information. Args: topic: The topic to search for max_results: Maximum number of results to retrieve (default: 5) Returns: List of paper IDs found in the search """ # Use arxiv to find the papers client = arxiv.Client() # Search for the most relevant articles matching the queried topic search = arxiv.Search( query = topic, max_results = max_results, sort_by = arxiv.SortCriterion.Relevance ) papers = client.results(search) # Create directory for this topic path = os.path.join(PAPER_DIR, topic.lower().replace(" ", "_")) os.makedirs(path, exist_ok=True) file_path = os.path.join(path, "papers_info.json") # Try to load existing papers info try: with open(file_path, "r") as json_file: papers_info = json.load(json_file) except (FileNotFoundError, json.JSONDecodeError): papers_info = {} # Process each paper and add to papers_info paper_ids = [] for paper in papers: paper_ids.append(paper.get_short_id()) paper_info = { &#39;title&#39;: paper.title, &#39;authors&#39;: [author.name for author in paper.authors], &#39;summary&#39;: paper.summary, &#39;pdf_url&#39;: paper.pdf_url, &#39;published&#39;: str(paper.published.date()) } papers_info[paper.get_short_id()] = paper_info # Save updated papers_info to json file with open(file_path, "w") as json_file: json.dump(papers_info, json_file, indent=2) print(f"Results are saved in: {file_path}") return paper_ids @mcp.tool() def extract_info(paper_id: str) -> str: """ Search for information about a specific paper across all topic directories. Args: paper_id: The ID of the paper to look for Returns: JSON string with paper information if found, error message if not found """ for item in os.listdir(PAPER_DIR): item_path = os.path.join(PAPER_DIR, item) if os.path.isdir(item_path): file_path = os.path.join(item_path, "papers_info.json") if os.path.isfile(file_path): try: with open(file_path, "r") as json_file: papers_info = json.load(json_file) if paper_id in papers_info: return json.dumps(papers_info[paper_id], indent=2) except (FileNotFoundError, json.JSONDecodeError) as e: print(f"Error reading {file_path}: {str(e)}") continue return f"There&#39;s no saved information related to paper {paper_id}." @mcp.resource("papers://folders") def get_available_folders() -> str: """ List all available topic folders in the papers directory. This resource provides a simple list of all available topic folders. """ folders = [] # Get all topic directories if os.path.exists(PAPER_DIR): for topic_dir in os.listdir(PAPER_DIR): topic_path = os.path.join(PAPER_DIR, topic_dir) if os.path.isdir(topic_path): papers_file = os.path.join(topic_path, "papers_info.json") if os.path.exists(papers_file): folders.append(topic_dir) # Create a simple markdown list content = "# Available Topics\n\n" if folders: for folder in folders: content += f"- {folder}\n" content += f"\nUse @{folder} to access papers in that topic.\n" else: content += "No topics found.\n" return content @mcp.resource("papers://{topic}") def get_topic_papers(topic: str) -> str: """ Get detailed information about papers on a specific topic. Args: topic: The research topic to retrieve papers for """ topic_dir = topic.lower().replace(" ", "_") papers_file = os.path.join(PAPER_DIR, topic_dir, "papers_info.json") if not os.path.exists(papers_file): return f"# No papers found for topic: {topic}\n\nTry searching for papers on this topic first." try: with open(papers_file, &#39;r&#39;) as f: papers_data = json.load(f) # Create markdown content with paper details content = f"# Papers on {topic.replace(&#39;_&#39;, &#39; &#39;).title()}\n\n" content += f"Total papers: {len(papers_data)}\n\n" for paper_id, paper_info in papers_data.items(): content += f"## {paper_info[&#39;title&#39;]}\n" content += f"- **Paper ID**: {paper_id}\n" content += f"- **Authors**: {&#39;, &#39;.join(paper_info[&#39;authors&#39;])}\n" content += f"- **Published**: {paper_info[&#39;published&#39;]}\n" content += f"- **PDF URL**: [{paper_info[&#39;pdf_url&#39;]}]({paper_info[&#39;pdf_url&#39;]})\n\n" content += f"### Summary\n{paper_info[&#39;summary&#39;][:500]}...\n\n" content += "---\n\n" return content except json.JSONDecodeError: return f"# Error reading papers data for {topic}\n\nThe papers data file is corrupted." @mcp.prompt() def generate_search_prompt(topic: str, num_papers: int = 5) -> str: """Generate a prompt for Claude to find and discuss academic papers on a specific topic.""" return f"""Search for {num_papers} academic papers about &#39;{topic}&#39; using the search_papers tool. Follow these instructions: 1. First, search for papers using search_papers(topic=&#39;{topic}&#39;, max_results={num_papers}) 2. For each paper found, extract and organize the following information: - Paper title - Authors - Publication date - Brief summary of the key findings - Main contributions or innovations - Methodologies used - Relevance to the topic &#39;{topic}&#39; 3. Provide a comprehensive summary that includes: - Overview of the current state of research in &#39;{topic}&#39; - Common themes and trends across the papers - Key research gaps or areas for future investigation - Most impactful or influential papers in this area 4. Organize your findings in a clear, structured format with headings and bullet points for easy readability. Please present both detailed information about each paper and a high-level synthesis of the research landscape in {topic}.""" if __name__ == "__main__": # Initialize and run the server mcp.run(transport=&#39;sse&#39;) Reference DeepLearning.AI - MCP: Build Rich-Context AI Apps with Anthropic'><meta property="og:locale" content="en"><meta property="og:type" content="article"><meta property="article:section" content="posts"><meta property="article:published_time" content="2025-08-23T00:00:00+00:00"><meta property="article:modified_time" content="2025-08-25T19:04:39+08:00"><meta property="article:tag" content="MCP"><meta property="article:tag" content="AI"><meta property="og:image" content="https://dexter1636.github.io/images/papermod-cover.png"><meta name=twitter:card content="summary_large_image"><meta name=twitter:image content="https://dexter1636.github.io/images/papermod-cover.png"><meta name=twitter:title content="MCP: Build Rich-Context AI Apps with Anthropic"><meta name=twitter:description content='Introduction
+MCP is an open protocol that standardizes how applications provide context to large language models (LLMs).
+
+Why MCP
+
+
+
+
+MCP Architecture
+graph TB
+    subgraph "MCP Host (AI Application)"
+        Client1["MCP Client 1"]
+        Client2["MCP Client 2"]
+        Client3["MCP Client 3"]
+    end
+
+    Server1["MCP Server 1<br/>(e.g., Sentry)"]
+    Server2["MCP Server 2<br/>(e.g., Filesystem)"]
+    Server3["MCP Server 3<br/>(e.g., Database)"]
+
+    Client1 ---|"One-to-one<br/>connection"| Server1
+    Client2 ---|"One-to-one<br/>connection"| Server2
+    Client3 ---|"One-to-one<br/>connection"| Server3
+
+    style Client1 fill:#e1f5fe
+    style Client2 fill:#e1f5fe
+    style Client3 fill:#e1f5fe
+    style Server1 fill:#f3e5f5
+    style Server2 fill:#f3e5f5
+    style Server3 fill:#f3e5f5
+
+
+
+
+
+
+
+
+
+Creating an MCP Client and an MCP Server
+From Function Call to MCP
+
+Whole Picture
+
+
+Tools/Resources/Prompts Discovery and Invocation
+
+
+
+
+
+
+
+
+
+
+
+
+Client Source Code
+from dotenv import load_dotenv
+from anthropic import Anthropic
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from contextlib import AsyncExitStack
+import json
+import asyncio
+import nest_asyncio
+
+nest_asyncio.apply()
+
+load_dotenv()
+
+class MCP_ChatBot:
+    def __init__(self):
+        self.exit_stack = AsyncExitStack()
+        self.anthropic = Anthropic()
+        # Tools list required for Anthropic API
+        self.available_tools = []
+        # Prompts list for quick display 
+        self.available_prompts = []
+        # Sessions dict maps tool/prompt names or resource URIs to MCP client sessions
+        self.sessions = {}
+
+    async def connect_to_server(self, server_name, server_config):
+        try:
+            server_params = StdioServerParameters(**server_config)
+            stdio_transport = await self.exit_stack.enter_async_context(
+                stdio_client(server_params)
+            )
+            read, write = stdio_transport
+            session = await self.exit_stack.enter_async_context(
+                ClientSession(read, write)
+            )
+            await session.initialize()
+            
+            
+            try:
+                # List available tools
+                response = await session.list_tools()
+                for tool in response.tools:
+                    self.sessions[tool.name] = session
+                    self.available_tools.append({
+                        "name": tool.name,
+                        "description": tool.description,
+                        "input_schema": tool.inputSchema
+                    })
+            
+                # List available prompts
+                prompts_response = await session.list_prompts()
+                if prompts_response and prompts_response.prompts:
+                    for prompt in prompts_response.prompts:
+                        self.sessions[prompt.name] = session
+                        self.available_prompts.append({
+                            "name": prompt.name,
+                            "description": prompt.description,
+                            "arguments": prompt.arguments
+                        })
+                # List available resources
+                resources_response = await session.list_resources()
+                if resources_response and resources_response.resources:
+                    for resource in resources_response.resources:
+                        resource_uri = str(resource.uri)
+                        self.sessions[resource_uri] = session
+            
+            except Exception as e:
+                print(f"Error {e}")
+                
+        except Exception as e:
+            print(f"Error connecting to {server_name}: {e}")
+
+    async def connect_to_servers(self):
+        try:
+            with open("server_config.json", "r") as file:
+                data = json.load(file)
+            servers = data.get("mcpServers", {})
+            for server_name, server_config in servers.items():
+                await self.connect_to_server(server_name, server_config)
+        except Exception as e:
+            print(f"Error loading server config: {e}")
+            raise
+    
+    async def process_query(self, query):
+        messages = [{&#39;role&#39;:&#39;user&#39;, &#39;content&#39;:query}]
+        
+        while True:
+            response = self.anthropic.messages.create(
+                max_tokens = 2024,
+                model = &#39;claude-3-7-sonnet-20250219&#39;, 
+                tools = self.available_tools,
+                messages = messages
+            )
+            
+            assistant_content = []
+            has_tool_use = False
+            
+            for content in response.content:
+                if content.type == &#39;text&#39;:
+                    print(content.text)
+                    assistant_content.append(content)
+                elif content.type == &#39;tool_use&#39;:
+                    has_tool_use = True
+                    assistant_content.append(content)
+                    messages.append({&#39;role&#39;:&#39;assistant&#39;, &#39;content&#39;:assistant_content})
+                    
+                    # Get session and call tool
+                    session = self.sessions.get(content.name)
+                    if not session:
+                        print(f"Tool &#39;{content.name}&#39; not found.")
+                        break
+                        
+                    result = await session.call_tool(content.name, arguments=content.input)
+                    messages.append({
+                        "role": "user", 
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": content.id,
+                                "content": result.content
+                            }
+                        ]
+                    })
+            
+            # Exit loop if no tool was used
+            if not has_tool_use:
+                break
+
+    async def get_resource(self, resource_uri):
+        session = self.sessions.get(resource_uri)
+        
+        # Fallback for papers URIs - try any papers resource session
+        if not session and resource_uri.startswith("papers://"):
+            for uri, sess in self.sessions.items():
+                if uri.startswith("papers://"):
+                    session = sess
+                    break
+            
+        if not session:
+            print(f"Resource &#39;{resource_uri}&#39; not found.")
+            return
+        
+        try:
+            result = await session.read_resource(uri=resource_uri)
+            if result and result.contents:
+                print(f"\nResource: {resource_uri}")
+                print("Content:")
+                print(result.contents[0].text)
+            else:
+                print("No content available.")
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    async def list_prompts(self):
+        """List all available prompts."""
+        if not self.available_prompts:
+            print("No prompts available.")
+            return
+        
+        print("\nAvailable prompts:")
+        for prompt in self.available_prompts:
+            print(f"- {prompt[&#39;name&#39;]}: {prompt[&#39;description&#39;]}")
+            if prompt[&#39;arguments&#39;]:
+                print(f"  Arguments:")
+                for arg in prompt[&#39;arguments&#39;]:
+                    arg_name = arg.name if hasattr(arg, &#39;name&#39;) else arg.get(&#39;name&#39;, &#39;&#39;)
+                    print(f"    - {arg_name}")
+    
+    async def execute_prompt(self, prompt_name, args):
+        """Execute a prompt with the given arguments."""
+        session = self.sessions.get(prompt_name)
+        if not session:
+            print(f"Prompt &#39;{prompt_name}&#39; not found.")
+            return
+        
+        try:
+            result = await session.get_prompt(prompt_name, arguments=args)
+            if result and result.messages:
+                prompt_content = result.messages[0].content
+                
+                # Extract text from content (handles different formats)
+                if isinstance(prompt_content, str):
+                    text = prompt_content
+                elif hasattr(prompt_content, &#39;text&#39;):
+                    text = prompt_content.text
+                else:
+                    # Handle list of content items
+                    text = " ".join(item.text if hasattr(item, &#39;text&#39;) else str(item) 
+                                  for item in prompt_content)
+                
+                print(f"\nExecuting prompt &#39;{prompt_name}&#39;...")
+                await self.process_query(text)
+        except Exception as e:
+            print(f"Error: {e}")
+    
+    async def chat_loop(self):
+        print("\nMCP Chatbot Started!")
+        print("Type your queries or &#39;quit&#39; to exit.")
+        print("Use @folders to see available topics")
+        print("Use @<topic> to search papers in that topic")
+        print("Use /prompts to list available prompts")
+        print("Use /prompt <name> <arg1=value1> to execute a prompt")
+        
+        while True:
+            try:
+                query = input("\nQuery: ").strip()
+                if not query:
+                    continue
+        
+                if query.lower() == &#39;quit&#39;:
+                    break
+                
+                # Check for @resource syntax first
+                if query.startswith(&#39;@&#39;):
+                    # Remove @ sign  
+                    topic = query[1:]
+                    if topic == "folders":
+                        resource_uri = "papers://folders"
+                    else:
+                        resource_uri = f"papers://{topic}"
+                    await self.get_resource(resource_uri)
+                    continue
+                
+                # Check for /command syntax
+                if query.startswith(&#39;/&#39;):
+                    parts = query.split()
+                    command = parts[0].lower()
+                    
+                    if command == &#39;/prompts&#39;:
+                        await self.list_prompts()
+                    elif command == &#39;/prompt&#39;:
+                        if len(parts) < 2:
+                            print("Usage: /prompt <name> <arg1=value1> <arg2=value2>")
+                            continue
+                        
+                        prompt_name = parts[1]
+                        args = {}
+                        
+                        # Parse arguments
+                        for arg in parts[2:]:
+                            if &#39;=&#39; in arg:
+                                key, value = arg.split(&#39;=&#39;, 1)
+                                args[key] = value
+                        
+                        await self.execute_prompt(prompt_name, args)
+                    else:
+                        print(f"Unknown command: {command}")
+                    continue
+                
+                await self.process_query(query)
+                    
+            except Exception as e:
+                print(f"\nError: {str(e)}")
+    
+    async def cleanup(self):
+        await self.exit_stack.aclose()
+
+
+async def main():
+    chatbot = MCP_ChatBot()
+    try:
+        await chatbot.connect_to_servers()
+        await chatbot.chat_loop()
+    finally:
+        await chatbot.cleanup()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
+SSE Remote Server Source Code
+import arxiv
+import json
+import os
+from typing import List
+from mcp.server.fastmcp import FastMCP
+
+PAPER_DIR = "papers"
+
+# Initialize FastMCP server
+mcp = FastMCP("research", port=8001)
+
+@mcp.tool()
+def search_papers(topic: str, max_results: int = 5) -> List[str]:
+    """
+    Search for papers on arXiv based on a topic and store their information.
+    
+    Args:
+        topic: The topic to search for
+        max_results: Maximum number of results to retrieve (default: 5)
+        
+    Returns:
+        List of paper IDs found in the search
+    """
+    
+    # Use arxiv to find the papers 
+    client = arxiv.Client()
+
+    # Search for the most relevant articles matching the queried topic
+    search = arxiv.Search(
+        query = topic,
+        max_results = max_results,
+        sort_by = arxiv.SortCriterion.Relevance
+    )
+
+    papers = client.results(search)
+    
+    # Create directory for this topic
+    path = os.path.join(PAPER_DIR, topic.lower().replace(" ", "_"))
+    os.makedirs(path, exist_ok=True)
+    
+    file_path = os.path.join(path, "papers_info.json")
+
+    # Try to load existing papers info
+    try:
+        with open(file_path, "r") as json_file:
+            papers_info = json.load(json_file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        papers_info = {}
+
+    # Process each paper and add to papers_info  
+    paper_ids = []
+    for paper in papers:
+        paper_ids.append(paper.get_short_id())
+        paper_info = {
+            &#39;title&#39;: paper.title,
+            &#39;authors&#39;: [author.name for author in paper.authors],
+            &#39;summary&#39;: paper.summary,
+            &#39;pdf_url&#39;: paper.pdf_url,
+            &#39;published&#39;: str(paper.published.date())
+        }
+        papers_info[paper.get_short_id()] = paper_info
+    
+    # Save updated papers_info to json file
+    with open(file_path, "w") as json_file:
+        json.dump(papers_info, json_file, indent=2)
+    
+    print(f"Results are saved in: {file_path}")
+    
+    return paper_ids
+
+@mcp.tool()
+def extract_info(paper_id: str) -> str:
+    """
+    Search for information about a specific paper across all topic directories.
+    
+    Args:
+        paper_id: The ID of the paper to look for
+        
+    Returns:
+        JSON string with paper information if found, error message if not found
+    """
+ 
+    for item in os.listdir(PAPER_DIR):
+        item_path = os.path.join(PAPER_DIR, item)
+        if os.path.isdir(item_path):
+            file_path = os.path.join(item_path, "papers_info.json")
+            if os.path.isfile(file_path):
+                try:
+                    with open(file_path, "r") as json_file:
+                        papers_info = json.load(json_file)
+                        if paper_id in papers_info:
+                            return json.dumps(papers_info[paper_id], indent=2)
+                except (FileNotFoundError, json.JSONDecodeError) as e:
+                    print(f"Error reading {file_path}: {str(e)}")
+                    continue
+    
+    return f"There&#39;s no saved information related to paper {paper_id}."
+
+
+
+@mcp.resource("papers://folders")
+def get_available_folders() -> str:
+    """
+    List all available topic folders in the papers directory.
+    
+    This resource provides a simple list of all available topic folders.
+    """
+    folders = []
+    
+    # Get all topic directories
+    if os.path.exists(PAPER_DIR):
+        for topic_dir in os.listdir(PAPER_DIR):
+            topic_path = os.path.join(PAPER_DIR, topic_dir)
+            if os.path.isdir(topic_path):
+                papers_file = os.path.join(topic_path, "papers_info.json")
+                if os.path.exists(papers_file):
+                    folders.append(topic_dir)
+    
+    # Create a simple markdown list
+    content = "# Available Topics\n\n"
+    if folders:
+        for folder in folders:
+            content += f"- {folder}\n"
+        content += f"\nUse @{folder} to access papers in that topic.\n"
+    else:
+        content += "No topics found.\n"
+    
+    return content
+
+@mcp.resource("papers://{topic}")
+def get_topic_papers(topic: str) -> str:
+    """
+    Get detailed information about papers on a specific topic.
+    
+    Args:
+        topic: The research topic to retrieve papers for
+    """
+    topic_dir = topic.lower().replace(" ", "_")
+    papers_file = os.path.join(PAPER_DIR, topic_dir, "papers_info.json")
+    
+    if not os.path.exists(papers_file):
+        return f"# No papers found for topic: {topic}\n\nTry searching for papers on this topic first."
+    
+    try:
+        with open(papers_file, &#39;r&#39;) as f:
+            papers_data = json.load(f)
+        
+        # Create markdown content with paper details
+        content = f"# Papers on {topic.replace(&#39;_&#39;, &#39; &#39;).title()}\n\n"
+        content += f"Total papers: {len(papers_data)}\n\n"
+        
+        for paper_id, paper_info in papers_data.items():
+            content += f"## {paper_info[&#39;title&#39;]}\n"
+            content += f"- **Paper ID**: {paper_id}\n"
+            content += f"- **Authors**: {&#39;, &#39;.join(paper_info[&#39;authors&#39;])}\n"
+            content += f"- **Published**: {paper_info[&#39;published&#39;]}\n"
+            content += f"- **PDF URL**: [{paper_info[&#39;pdf_url&#39;]}]({paper_info[&#39;pdf_url&#39;]})\n\n"
+            content += f"### Summary\n{paper_info[&#39;summary&#39;][:500]}...\n\n"
+            content += "---\n\n"
+        
+        return content
+    except json.JSONDecodeError:
+        return f"# Error reading papers data for {topic}\n\nThe papers data file is corrupted."
+
+@mcp.prompt()
+def generate_search_prompt(topic: str, num_papers: int = 5) -> str:
+    """Generate a prompt for Claude to find and discuss academic papers on a specific topic."""
+    return f"""Search for {num_papers} academic papers about &#39;{topic}&#39; using the search_papers tool. 
+
+    Follow these instructions:
+    1. First, search for papers using search_papers(topic=&#39;{topic}&#39;, max_results={num_papers})
+    2. For each paper found, extract and organize the following information:
+       - Paper title
+       - Authors
+       - Publication date
+       - Brief summary of the key findings
+       - Main contributions or innovations
+       - Methodologies used
+       - Relevance to the topic &#39;{topic}&#39;
+    
+    3. Provide a comprehensive summary that includes:
+       - Overview of the current state of research in &#39;{topic}&#39;
+       - Common themes and trends across the papers
+       - Key research gaps or areas for future investigation
+       - Most impactful or influential papers in this area
+    
+    4. Organize your findings in a clear, structured format with headings and bullet points for easy readability.
+    
+    Please present both detailed information about each paper and a high-level synthesis of the research landscape in {topic}."""
+
+if __name__ == "__main__":
+    # Initialize and run the server
+    mcp.run(transport=&#39;sse&#39;)
+Reference
+DeepLearning.AI - MCP: Build Rich-Context AI Apps with Anthropic'><script type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","position":1,"name":"Posts","item":"https://dexter1636.github.io/posts/"},{"@type":"ListItem","position":2,"name":"MCP: Build Rich-Context AI Apps with Anthropic","item":"https://dexter1636.github.io/posts/aicourses/mcp-build-rich-context-ai-apps-with-anthropic/"}]}</script><script type=application/ld+json>{"@context":"https://schema.org","@type":"BlogPosting","headline":"MCP: Build Rich-Context AI Apps with Anthropic","name":"MCP: Build Rich-Context AI Apps with Anthropic","description":"Introduction MCP is an open protocol that standardizes how applications provide context to large language models (LLMs).\nWhy MCP MCP Architecture graph TB subgraph \u0026#34;MCP Host (AI Application)\u0026#34; Client1[\u0026#34;MCP Client 1\u0026#34;] Client2[\u0026#34;MCP Client 2\u0026#34;] Client3[\u0026#34;MCP Client 3\u0026#34;] end Server1[\u0026#34;MCP Server 1\u0026lt;br/\u0026gt;(e.g., Sentry)\u0026#34;] Server2[\u0026#34;MCP Server 2\u0026lt;br/\u0026gt;(e.g., Filesystem)\u0026#34;] Server3[\u0026#34;MCP Server 3\u0026lt;br/\u0026gt;(e.g., Database)\u0026#34;] Client1 ---|\u0026#34;One-to-one\u0026lt;br/\u0026gt;connection\u0026#34;| Server1 Client2 ---|\u0026#34;One-to-one\u0026lt;br/\u0026gt;connection\u0026#34;| Server2 Client3 ---|\u0026#34;One-to-one\u0026lt;br/\u0026gt;connection\u0026#34;| Server3 style Client1 fill:#e1f5fe style Client2 fill:#e1f5fe style Client3 fill:#e1f5fe style Server1 fill:#f3e5f5 style Server2 fill:#f3e5f5 style Server3 fill:#f3e5f5 Creating an MCP Client and an MCP Server From Function Call to MCP Whole Picture Tools/Resources/Prompts Discovery and Invocation Client Source Code from dotenv import load_dotenv from anthropic import Anthropic from mcp import ClientSession, StdioServerParameters from mcp.client.stdio import stdio_client from contextlib import AsyncExitStack import json import asyncio import nest_asyncio nest_asyncio.apply() load_dotenv() class MCP_ChatBot: def __init__(self): self.exit_stack = AsyncExitStack() self.anthropic = Anthropic() # Tools list required for Anthropic API self.available_tools = [] # Prompts list for quick display self.available_prompts = [] # Sessions dict maps tool/prompt names or resource URIs to MCP client sessions self.sessions = {} async def connect_to_server(self, server_name, server_config): try: server_params = StdioServerParameters(**server_config) stdio_transport = await self.exit_stack.enter_async_context( stdio_client(server_params) ) read, write = stdio_transport session = await self.exit_stack.enter_async_context( ClientSession(read, write) ) await session.initialize() try: # List available tools response = await session.list_tools() for tool in response.tools: self.sessions[tool.name] = session self.available_tools.append({ \u0026#34;name\u0026#34;: tool.name, \u0026#34;description\u0026#34;: tool.description, \u0026#34;input_schema\u0026#34;: tool.inputSchema }) # List available prompts prompts_response = await session.list_prompts() if prompts_response and prompts_response.prompts: for prompt in prompts_response.prompts: self.sessions[prompt.name] = session self.available_prompts.append({ \u0026#34;name\u0026#34;: prompt.name, \u0026#34;description\u0026#34;: prompt.description, \u0026#34;arguments\u0026#34;: prompt.arguments }) # List available resources resources_response = await session.list_resources() if resources_response and resources_response.resources: for resource in resources_response.resources: resource_uri = str(resource.uri) self.sessions[resource_uri] = session except Exception as e: print(f\u0026#34;Error {e}\u0026#34;) except Exception as e: print(f\u0026#34;Error connecting to {server_name}: {e}\u0026#34;) async def connect_to_servers(self): try: with open(\u0026#34;server_config.json\u0026#34;, \u0026#34;r\u0026#34;) as file: data = json.load(file) servers = data.get(\u0026#34;mcpServers\u0026#34;, {}) for server_name, server_config in servers.items(): await self.connect_to_server(server_name, server_config) except Exception as e: print(f\u0026#34;Error loading server config: {e}\u0026#34;) raise async def process_query(self, query): messages = [{\u0026#39;role\u0026#39;:\u0026#39;user\u0026#39;, \u0026#39;content\u0026#39;:query}] while True: response = self.anthropic.messages.create( max_tokens = 2024, model = \u0026#39;claude-3-7-sonnet-20250219\u0026#39;, tools = self.available_tools, messages = messages ) assistant_content = [] has_tool_use = False for content in response.content: if content.type == \u0026#39;text\u0026#39;: print(content.text) assistant_content.append(content) elif content.type == \u0026#39;tool_use\u0026#39;: has_tool_use = True assistant_content.append(content) messages.append({\u0026#39;role\u0026#39;:\u0026#39;assistant\u0026#39;, \u0026#39;content\u0026#39;:assistant_content}) # Get session and call tool session = self.sessions.get(content.name) if not session: print(f\u0026#34;Tool \u0026#39;{content.name}\u0026#39; not found.\u0026#34;) break result = await session.call_tool(content.name, arguments=content.input) messages.append({ \u0026#34;role\u0026#34;: \u0026#34;user\u0026#34;, \u0026#34;content\u0026#34;: [ { \u0026#34;type\u0026#34;: \u0026#34;tool_result\u0026#34;, \u0026#34;tool_use_id\u0026#34;: content.id, \u0026#34;content\u0026#34;: result.content } ] }) # Exit loop if no tool was used if not has_tool_use: break async def get_resource(self, resource_uri): session = self.sessions.get(resource_uri) # Fallback for papers URIs - try any papers resource session if not session and resource_uri.startswith(\u0026#34;papers://\u0026#34;): for uri, sess in self.sessions.items(): if uri.startswith(\u0026#34;papers://\u0026#34;): session = sess break if not session: print(f\u0026#34;Resource \u0026#39;{resource_uri}\u0026#39; not found.\u0026#34;) return try: result = await session.read_resource(uri=resource_uri) if result and result.contents: print(f\u0026#34;\\nResource: {resource_uri}\u0026#34;) print(\u0026#34;Content:\u0026#34;) print(result.contents[0].text) else: print(\u0026#34;No content available.\u0026#34;) except Exception as e: print(f\u0026#34;Error: {e}\u0026#34;) async def list_prompts(self): \u0026#34;\u0026#34;\u0026#34;List all available prompts.\u0026#34;\u0026#34;\u0026#34; if not self.available_prompts: print(\u0026#34;No prompts available.\u0026#34;) return print(\u0026#34;\\nAvailable prompts:\u0026#34;) for prompt in self.available_prompts: print(f\u0026#34;- {prompt[\u0026#39;name\u0026#39;]}: {prompt[\u0026#39;description\u0026#39;]}\u0026#34;) if prompt[\u0026#39;arguments\u0026#39;]: print(f\u0026#34; Arguments:\u0026#34;) for arg in prompt[\u0026#39;arguments\u0026#39;]: arg_name = arg.name if hasattr(arg, \u0026#39;name\u0026#39;) else arg.get(\u0026#39;name\u0026#39;, \u0026#39;\u0026#39;) print(f\u0026#34; - {arg_name}\u0026#34;) async def execute_prompt(self, prompt_name, args): \u0026#34;\u0026#34;\u0026#34;Execute a prompt with the given arguments.\u0026#34;\u0026#34;\u0026#34; session = self.sessions.get(prompt_name) if not session: print(f\u0026#34;Prompt \u0026#39;{prompt_name}\u0026#39; not found.\u0026#34;) return try: result = await session.get_prompt(prompt_name, arguments=args) if result and result.messages: prompt_content = result.messages[0].content # Extract text from content (handles different formats) if isinstance(prompt_content, str): text = prompt_content elif hasattr(prompt_content, \u0026#39;text\u0026#39;): text = prompt_content.text else: # Handle list of content items text = \u0026#34; \u0026#34;.join(item.text if hasattr(item, \u0026#39;text\u0026#39;) else str(item) for item in prompt_content) print(f\u0026#34;\\nExecuting prompt \u0026#39;{prompt_name}\u0026#39;...\u0026#34;) await self.process_query(text) except Exception as e: print(f\u0026#34;Error: {e}\u0026#34;) async def chat_loop(self): print(\u0026#34;\\nMCP Chatbot Started!\u0026#34;) print(\u0026#34;Type your queries or \u0026#39;quit\u0026#39; to exit.\u0026#34;) print(\u0026#34;Use @folders to see available topics\u0026#34;) print(\u0026#34;Use @\u0026lt;topic\u0026gt; to search papers in that topic\u0026#34;) print(\u0026#34;Use /prompts to list available prompts\u0026#34;) print(\u0026#34;Use /prompt \u0026lt;name\u0026gt; \u0026lt;arg1=value1\u0026gt; to execute a prompt\u0026#34;) while True: try: query = input(\u0026#34;\\nQuery: \u0026#34;).strip() if not query: continue if query.lower() == \u0026#39;quit\u0026#39;: break # Check for @resource syntax first if query.startswith(\u0026#39;@\u0026#39;): # Remove @ sign topic = query[1:] if topic == \u0026#34;folders\u0026#34;: resource_uri = \u0026#34;papers://folders\u0026#34; else: resource_uri = f\u0026#34;papers://{topic}\u0026#34; await self.get_resource(resource_uri) continue # Check for /command syntax if query.startswith(\u0026#39;/\u0026#39;): parts = query.split() command = parts[0].lower() if command == \u0026#39;/prompts\u0026#39;: await self.list_prompts() elif command == \u0026#39;/prompt\u0026#39;: if len(parts) \u0026lt; 2: print(\u0026#34;Usage: /prompt \u0026lt;name\u0026gt; \u0026lt;arg1=value1\u0026gt; \u0026lt;arg2=value2\u0026gt;\u0026#34;) continue prompt_name = parts[1] args = {} # Parse arguments for arg in parts[2:]: if \u0026#39;=\u0026#39; in arg: key, value = arg.split(\u0026#39;=\u0026#39;, 1) args[key] = value await self.execute_prompt(prompt_name, args) else: print(f\u0026#34;Unknown command: {command}\u0026#34;) continue await self.process_query(query) except Exception as e: print(f\u0026#34;\\nError: {str(e)}\u0026#34;) async def cleanup(self): await self.exit_stack.aclose() async def main(): chatbot = MCP_ChatBot() try: await chatbot.connect_to_servers() await chatbot.chat_loop() finally: await chatbot.cleanup() if __name__ == \u0026#34;__main__\u0026#34;: asyncio.run(main()) SSE Remote Server Source Code import arxiv import json import os from typing import List from mcp.server.fastmcp import FastMCP PAPER_DIR = \u0026#34;papers\u0026#34; # Initialize FastMCP server mcp = FastMCP(\u0026#34;research\u0026#34;, port=8001) @mcp.tool() def search_papers(topic: str, max_results: int = 5) -\u0026gt; List[str]: \u0026#34;\u0026#34;\u0026#34; Search for papers on arXiv based on a topic and store their information. Args: topic: The topic to search for max_results: Maximum number of results to retrieve (default: 5) Returns: List of paper IDs found in the search \u0026#34;\u0026#34;\u0026#34; # Use arxiv to find the papers client = arxiv.Client() # Search for the most relevant articles matching the queried topic search = arxiv.Search( query = topic, max_results = max_results, sort_by = arxiv.SortCriterion.Relevance ) papers = client.results(search) # Create directory for this topic path = os.path.join(PAPER_DIR, topic.lower().replace(\u0026#34; \u0026#34;, \u0026#34;_\u0026#34;)) os.makedirs(path, exist_ok=True) file_path = os.path.join(path, \u0026#34;papers_info.json\u0026#34;) # Try to load existing papers info try: with open(file_path, \u0026#34;r\u0026#34;) as json_file: papers_info = json.load(json_file) except (FileNotFoundError, json.JSONDecodeError): papers_info = {} # Process each paper and add to papers_info paper_ids = [] for paper in papers: paper_ids.append(paper.get_short_id()) paper_info = { \u0026#39;title\u0026#39;: paper.title, \u0026#39;authors\u0026#39;: [author.name for author in paper.authors], \u0026#39;summary\u0026#39;: paper.summary, \u0026#39;pdf_url\u0026#39;: paper.pdf_url, \u0026#39;published\u0026#39;: str(paper.published.date()) } papers_info[paper.get_short_id()] = paper_info # Save updated papers_info to json file with open(file_path, \u0026#34;w\u0026#34;) as json_file: json.dump(papers_info, json_file, indent=2) print(f\u0026#34;Results are saved in: {file_path}\u0026#34;) return paper_ids @mcp.tool() def extract_info(paper_id: str) -\u0026gt; str: \u0026#34;\u0026#34;\u0026#34; Search for information about a specific paper across all topic directories. Args: paper_id: The ID of the paper to look for Returns: JSON string with paper information if found, error message if not found \u0026#34;\u0026#34;\u0026#34; for item in os.listdir(PAPER_DIR): item_path = os.path.join(PAPER_DIR, item) if os.path.isdir(item_path): file_path = os.path.join(item_path, \u0026#34;papers_info.json\u0026#34;) if os.path.isfile(file_path): try: with open(file_path, \u0026#34;r\u0026#34;) as json_file: papers_info = json.load(json_file) if paper_id in papers_info: return json.dumps(papers_info[paper_id], indent=2) except (FileNotFoundError, json.JSONDecodeError) as e: print(f\u0026#34;Error reading {file_path}: {str(e)}\u0026#34;) continue return f\u0026#34;There\u0026#39;s no saved information related to paper {paper_id}.\u0026#34; @mcp.resource(\u0026#34;papers://folders\u0026#34;) def get_available_folders() -\u0026gt; str: \u0026#34;\u0026#34;\u0026#34; List all available topic folders in the papers directory. This resource provides a simple list of all available topic folders. \u0026#34;\u0026#34;\u0026#34; folders = [] # Get all topic directories if os.path.exists(PAPER_DIR): for topic_dir in os.listdir(PAPER_DIR): topic_path = os.path.join(PAPER_DIR, topic_dir) if os.path.isdir(topic_path): papers_file = os.path.join(topic_path, \u0026#34;papers_info.json\u0026#34;) if os.path.exists(papers_file): folders.append(topic_dir) # Create a simple markdown list content = \u0026#34;# Available Topics\\n\\n\u0026#34; if folders: for folder in folders: content += f\u0026#34;- {folder}\\n\u0026#34; content += f\u0026#34;\\nUse @{folder} to access papers in that topic.\\n\u0026#34; else: content += \u0026#34;No topics found.\\n\u0026#34; return content @mcp.resource(\u0026#34;papers://{topic}\u0026#34;) def get_topic_papers(topic: str) -\u0026gt; str: \u0026#34;\u0026#34;\u0026#34; Get detailed information about papers on a specific topic. Args: topic: The research topic to retrieve papers for \u0026#34;\u0026#34;\u0026#34; topic_dir = topic.lower().replace(\u0026#34; \u0026#34;, \u0026#34;_\u0026#34;) papers_file = os.path.join(PAPER_DIR, topic_dir, \u0026#34;papers_info.json\u0026#34;) if not os.path.exists(papers_file): return f\u0026#34;# No papers found for topic: {topic}\\n\\nTry searching for papers on this topic first.\u0026#34; try: with open(papers_file, \u0026#39;r\u0026#39;) as f: papers_data = json.load(f) # Create markdown content with paper details content = f\u0026#34;# Papers on {topic.replace(\u0026#39;_\u0026#39;, \u0026#39; \u0026#39;).title()}\\n\\n\u0026#34; content += f\u0026#34;Total papers: {len(papers_data)}\\n\\n\u0026#34; for paper_id, paper_info in papers_data.items(): content += f\u0026#34;## {paper_info[\u0026#39;title\u0026#39;]}\\n\u0026#34; content += f\u0026#34;- **Paper ID**: {paper_id}\\n\u0026#34; content += f\u0026#34;- **Authors**: {\u0026#39;, \u0026#39;.join(paper_info[\u0026#39;authors\u0026#39;])}\\n\u0026#34; content += f\u0026#34;- **Published**: {paper_info[\u0026#39;published\u0026#39;]}\\n\u0026#34; content += f\u0026#34;- **PDF URL**: [{paper_info[\u0026#39;pdf_url\u0026#39;]}]({paper_info[\u0026#39;pdf_url\u0026#39;]})\\n\\n\u0026#34; content += f\u0026#34;### Summary\\n{paper_info[\u0026#39;summary\u0026#39;][:500]}...\\n\\n\u0026#34; content += \u0026#34;---\\n\\n\u0026#34; return content except json.JSONDecodeError: return f\u0026#34;# Error reading papers data for {topic}\\n\\nThe papers data file is corrupted.\u0026#34; @mcp.prompt() def generate_search_prompt(topic: str, num_papers: int = 5) -\u0026gt; str: \u0026#34;\u0026#34;\u0026#34;Generate a prompt for Claude to find and discuss academic papers on a specific topic.\u0026#34;\u0026#34;\u0026#34; return f\u0026#34;\u0026#34;\u0026#34;Search for {num_papers} academic papers about \u0026#39;{topic}\u0026#39; using the search_papers tool. Follow these instructions: 1. First, search for papers using search_papers(topic=\u0026#39;{topic}\u0026#39;, max_results={num_papers}) 2. For each paper found, extract and organize the following information: - Paper title - Authors - Publication date - Brief summary of the key findings - Main contributions or innovations - Methodologies used - Relevance to the topic \u0026#39;{topic}\u0026#39; 3. Provide a comprehensive summary that includes: - Overview of the current state of research in \u0026#39;{topic}\u0026#39; - Common themes and trends across the papers - Key research gaps or areas for future investigation - Most impactful or influential papers in this area 4. Organize your findings in a clear, structured format with headings and bullet points for easy readability. Please present both detailed information about each paper and a high-level synthesis of the research landscape in {topic}.\u0026#34;\u0026#34;\u0026#34; if __name__ == \u0026#34;__main__\u0026#34;: # Initialize and run the server mcp.run(transport=\u0026#39;sse\u0026#39;) Reference DeepLearning.AI - MCP: Build Rich-Context AI Apps with Anthropic\n","keywords":["MCP","AI"],"articleBody":"Introduction MCP is an open protocol that standardizes how applications provide context to large language models (LLMs).\nWhy MCP MCP Architecture graph TB subgraph \"MCP Host (AI Application)\" Client1[\"MCP Client 1\"] Client2[\"MCP Client 2\"] Client3[\"MCP Client 3\"] end Server1[\"MCP Server 1(e.g., Sentry)\"] Server2[\"MCP Server 2(e.g., Filesystem)\"] Server3[\"MCP Server 3(e.g., Database)\"] Client1 ---|\"One-to-oneconnection\"| Server1 Client2 ---|\"One-to-oneconnection\"| Server2 Client3 ---|\"One-to-oneconnection\"| Server3 style Client1 fill:#e1f5fe style Client2 fill:#e1f5fe style Client3 fill:#e1f5fe style Server1 fill:#f3e5f5 style Server2 fill:#f3e5f5 style Server3 fill:#f3e5f5 Creating an MCP Client and an MCP Server From Function Call to MCP Whole Picture Tools/Resources/Prompts Discovery and Invocation Client Source Code from dotenv import load_dotenv from anthropic import Anthropic from mcp import ClientSession, StdioServerParameters from mcp.client.stdio import stdio_client from contextlib import AsyncExitStack import json import asyncio import nest_asyncio nest_asyncio.apply() load_dotenv() class MCP_ChatBot: def __init__(self): self.exit_stack = AsyncExitStack() self.anthropic = Anthropic() # Tools list required for Anthropic API self.available_tools = [] # Prompts list for quick display self.available_prompts = [] # Sessions dict maps tool/prompt names or resource URIs to MCP client sessions self.sessions = {} async def connect_to_server(self, server_name, server_config): try: server_params = StdioServerParameters(**server_config) stdio_transport = await self.exit_stack.enter_async_context( stdio_client(server_params) ) read, write = stdio_transport session = await self.exit_stack.enter_async_context( ClientSession(read, write) ) await session.initialize() try: # List available tools response = await session.list_tools() for tool in response.tools: self.sessions[tool.name] = session self.available_tools.append({ \"name\": tool.name, \"description\": tool.description, \"input_schema\": tool.inputSchema }) # List available prompts prompts_response = await session.list_prompts() if prompts_response and prompts_response.prompts: for prompt in prompts_response.prompts: self.sessions[prompt.name] = session self.available_prompts.append({ \"name\": prompt.name, \"description\": prompt.description, \"arguments\": prompt.arguments }) # List available resources resources_response = await session.list_resources() if resources_response and resources_response.resources: for resource in resources_response.resources: resource_uri = str(resource.uri) self.sessions[resource_uri] = session except Exception as e: print(f\"Error {e}\") except Exception as e: print(f\"Error connecting to {server_name}: {e}\") async def connect_to_servers(self): try: with open(\"server_config.json\", \"r\") as file: data = json.load(file) servers = data.get(\"mcpServers\", {}) for server_name, server_config in servers.items(): await self.connect_to_server(server_name, server_config) except Exception as e: print(f\"Error loading server config: {e}\") raise async def process_query(self, query): messages = [{'role':'user', 'content':query}] while True: response = self.anthropic.messages.create( max_tokens = 2024, model = 'claude-3-7-sonnet-20250219', tools = self.available_tools, messages = messages ) assistant_content = [] has_tool_use = False for content in response.content: if content.type == 'text': print(content.text) assistant_content.append(content) elif content.type == 'tool_use': has_tool_use = True assistant_content.append(content) messages.append({'role':'assistant', 'content':assistant_content}) # Get session and call tool session = self.sessions.get(content.name) if not session: print(f\"Tool '{content.name}' not found.\") break result = await session.call_tool(content.name, arguments=content.input) messages.append({ \"role\": \"user\", \"content\": [ { \"type\": \"tool_result\", \"tool_use_id\": content.id, \"content\": result.content } ] }) # Exit loop if no tool was used if not has_tool_use: break async def get_resource(self, resource_uri): session = self.sessions.get(resource_uri) # Fallback for papers URIs - try any papers resource session if not session and resource_uri.startswith(\"papers://\"): for uri, sess in self.sessions.items(): if uri.startswith(\"papers://\"): session = sess break if not session: print(f\"Resource '{resource_uri}' not found.\") return try: result = await session.read_resource(uri=resource_uri) if result and result.contents: print(f\"\\nResource: {resource_uri}\") print(\"Content:\") print(result.contents[0].text) else: print(\"No content available.\") except Exception as e: print(f\"Error: {e}\") async def list_prompts(self): \"\"\"List all available prompts.\"\"\" if not self.available_prompts: print(\"No prompts available.\") return print(\"\\nAvailable prompts:\") for prompt in self.available_prompts: print(f\"- {prompt['name']}: {prompt['description']}\") if prompt['arguments']: print(f\" Arguments:\") for arg in prompt['arguments']: arg_name = arg.name if hasattr(arg, 'name') else arg.get('name', '') print(f\" - {arg_name}\") async def execute_prompt(self, prompt_name, args): \"\"\"Execute a prompt with the given arguments.\"\"\" session = self.sessions.get(prompt_name) if not session: print(f\"Prompt '{prompt_name}' not found.\") return try: result = await session.get_prompt(prompt_name, arguments=args) if result and result.messages: prompt_content = result.messages[0].content # Extract text from content (handles different formats) if isinstance(prompt_content, str): text = prompt_content elif hasattr(prompt_content, 'text'): text = prompt_content.text else: # Handle list of content items text = \" \".join(item.text if hasattr(item, 'text') else str(item) for item in prompt_content) print(f\"\\nExecuting prompt '{prompt_name}'...\") await self.process_query(text) except Exception as e: print(f\"Error: {e}\") async def chat_loop(self): print(\"\\nMCP Chatbot Started!\") print(\"Type your queries or 'quit' to exit.\") print(\"Use @folders to see available topics\") print(\"Use @ to search papers in that topic\") print(\"Use /prompts to list available prompts\") print(\"Use /prompt ","wordCount":"1534","inLanguage":"en","image":"https://dexter1636.github.io/images/papermod-cover.png","datePublished":"2025-08-23T00:00:00Z","dateModified":"2025-08-25T19:04:39+08:00","author":{"@type":"Person","name":"Dexter"},"mainEntityOfPage":{"@type":"WebPage","@id":"https://dexter1636.github.io/posts/aicourses/mcp-build-rich-context-ai-apps-with-anthropic/"},"publisher":{"@type":"Organization","name":"Dexter's Blog","logo":{"@type":"ImageObject","url":"https://dexter1636.github.io/favicon.ico"}}}</script></head><body id=top><script>localStorage.getItem("pref-theme")==="dark"?document.body.classList.add("dark"):localStorage.getItem("pref-theme")==="light"?document.body.classList.remove("dark"):window.matchMedia("(prefers-color-scheme: dark)").matches&&document.body.classList.add("dark")</script><header class=header><nav class=nav><div class=logo><a href=https://dexter1636.github.io/ accesskey=h title="Dexter's Blog (Alt + H)">Dexter's Blog</a><div class=logo-switches><button id=theme-toggle accesskey=t title="(Alt + T)" aria-label="Toggle theme">
+<svg id="moon" width="24" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>
+<svg id="sun" width="24" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></button></div></div><ul id=menu><li><a href=https://dexter1636.github.io/archives title=Archive><span>Archive</span></a></li><li><a href=https://dexter1636.github.io/search/ title="Search (Alt + /)" accesskey=/><span>Search</span></a></li><li><a href=https://dexter1636.github.io/tags/ title=Tags><span>Tags</span></a></li><li><a href=https://dexter1636.github.io/about title=About><span>About</span></a></li></ul></nav></header><main class=main><article class=post-single><header class=post-header><h1 class="post-title entry-hint-parent">MCP: Build Rich-Context AI Apps with Anthropic</h1><div class=post-meta><span title='2025-08-23 00:00:00 +0000 UTC'>August 23, 2025</span>&nbsp;·&nbsp;<span title='Last updated 2025-08-25 19:04:39 +0800 +0800'>Last updated on August 25, 2025</span>&nbsp;·&nbsp;8 min&nbsp;·&nbsp;Dexter&nbsp;|&nbsp;<a href=https://github.com/Dexter1636/dexter1636.github.io/tree/master/content/posts/AICourses/MCP%20Build%20Rich-Context%20AI%20Apps%20with%20Anthropic/index.md rel="noopener noreferrer edit" target=_blank>Suggest Changes</a></div></header><div class=toc><details><summary accesskey=c title="(Alt + C)"><span class=details>Table of Contents</span></summary><div class=inner><ul><li><a href=#introduction aria-label=Introduction>Introduction</a></li><li><a href=#why-mcp aria-label="Why MCP">Why MCP</a></li><li><a href=#mcp-architecture aria-label="MCP Architecture">MCP Architecture</a></li><li><a href=#creating-an-mcp-client-and-an-mcp-server aria-label="Creating an MCP Client and an MCP Server">Creating an MCP Client and an MCP Server</a><ul><li><a href=#from-function-call-to-mcp aria-label="From Function Call to MCP">From Function Call to MCP</a></li><li><a href=#whole-picture aria-label="Whole Picture">Whole Picture</a></li><li><a href=#toolsresourcesprompts-discovery-and-invocation aria-label="Tools/Resources/Prompts Discovery and Invocation">Tools/Resources/Prompts Discovery and Invocation</a></li><li><a href=#client-source-code aria-label="Client Source Code">Client Source Code</a></li><li><a href=#sse-remote-server-source-code aria-label="SSE Remote Server Source Code">SSE Remote Server Source Code</a></li></ul></li><li><a href=#reference aria-label=Reference>Reference</a></li></ul></div></details></div><div class=post-content><h2 id=introduction>Introduction<a hidden class=anchor aria-hidden=true href=#introduction>#</a></h2><p>MCP is an open protocol that standardizes how applications provide context to large language models (LLMs).</p><img src=assets/what_is_mcp.png alt=what_is_mcp style=zoom:33%><h2 id=why-mcp>Why MCP<a hidden class=anchor aria-hidden=true href=#why-mcp>#</a></h2><img src=assets/without_mcp.png alt=without_mcp style=zoom:33%>
+<img src=assets/with_mcp.png alt=with_mcp style=zoom:33%>
+<img src=assets/with_mcp_1.png alt=with_mcp_1 style=zoom:33%>
+<img src=assets/with_mcp_2.png alt=with_mcp_2 style=zoom:33%><h2 id=mcp-architecture>MCP Architecture<a hidden class=anchor aria-hidden=true href=#mcp-architecture>#</a></h2><pre class=mermaid>graph TB
+    subgraph &#34;MCP Host (AI Application)&#34;
+        Client1[&#34;MCP Client 1&#34;]
+        Client2[&#34;MCP Client 2&#34;]
+        Client3[&#34;MCP Client 3&#34;]
+    end
+
+    Server1[&#34;MCP Server 1&lt;br/&gt;(e.g., Sentry)&#34;]
+    Server2[&#34;MCP Server 2&lt;br/&gt;(e.g., Filesystem)&#34;]
+    Server3[&#34;MCP Server 3&lt;br/&gt;(e.g., Database)&#34;]
+
+    Client1 ---|&#34;One-to-one&lt;br/&gt;connection&#34;| Server1
+    Client2 ---|&#34;One-to-one&lt;br/&gt;connection&#34;| Server2
+    Client3 ---|&#34;One-to-one&lt;br/&gt;connection&#34;| Server3
+
+    style Client1 fill:#e1f5fe
+    style Client2 fill:#e1f5fe
+    style Client3 fill:#e1f5fe
+    style Server1 fill:#f3e5f5
+    style Server2 fill:#f3e5f5
+    style Server3 fill:#f3e5f5
+</pre><img src=assets/CS_arch.png alt=CS_arch style=zoom:33%>
+<img src=assets/how_mcp_server_work.png alt=how_mcp_server_work style=zoom:33%>
+<img src=assets/define_tools.png alt=define_tools style=zoom:33%>
+<img src=assets/define_resources.png alt=define_resources style=zoom:33%>
+<img src=assets/define_prompts.png alt=define_prompts style=zoom:33%>
+<img src=assets/communication_lifecycle.png alt=communication_lifecycle style=zoom:33%>
+<img src=assets/mcp_transports.png alt=mcp_transports style=zoom:33%>
+<img src=assets/streamable_http_transport.png alt=streamable_http_transport style=zoom:33%><h2 id=creating-an-mcp-client-and-an-mcp-server>Creating an MCP Client and an MCP Server<a hidden class=anchor aria-hidden=true href=#creating-an-mcp-client-and-an-mcp-server>#</a></h2><h3 id=from-function-call-to-mcp>From Function Call to MCP<a hidden class=anchor aria-hidden=true href=#from-function-call-to-mcp>#</a></h3><img src=assets/from_function_call_to_mcp.png alt=from_function_call_to_mcp style=zoom:33%><h3 id=whole-picture>Whole Picture<a hidden class=anchor aria-hidden=true href=#whole-picture>#</a></h3><img src=assets/whole_picture_1.png alt=whole_picture_1 style=zoom:33%>
+<img src=assets/whole_picture_2.png alt=whole_picture_2 style=zoom:33%><h3 id=toolsresourcesprompts-discovery-and-invocation>Tools/Resources/Prompts Discovery and Invocation<a hidden class=anchor aria-hidden=true href=#toolsresourcesprompts-discovery-and-invocation>#</a></h3><figure><img src=assets/tools_discovery.png alt=tools_discovery style=zoom:36%>
+<img src=assets/tool_invocation.png alt=tool_invocation style=zoom:36%></figure><figure><img src=assets/resource_discovery.png alt=resource_discovery style=zoom:36%>
+<img src=assets/resource_invocation.png alt=resource_invocation style=zoom:36%></figure><figure><img src=assets/prompt_discovery.png alt=prompt_discovery style=zoom:36%>
+<img src=assets/prompt_invocation.png alt=prompt_invocation style=zoom:36%></figure><h3 id=client-source-code>Client Source Code<a hidden class=anchor aria-hidden=true href=#client-source-code>#</a></h3><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=kn>from</span> <span class=nn>dotenv</span> <span class=kn>import</span> <span class=n>load_dotenv</span>
+</span></span><span class=line><span class=cl><span class=kn>from</span> <span class=nn>anthropic</span> <span class=kn>import</span> <span class=n>Anthropic</span>
+</span></span><span class=line><span class=cl><span class=kn>from</span> <span class=nn>mcp</span> <span class=kn>import</span> <span class=n>ClientSession</span><span class=p>,</span> <span class=n>StdioServerParameters</span>
+</span></span><span class=line><span class=cl><span class=kn>from</span> <span class=nn>mcp.client.stdio</span> <span class=kn>import</span> <span class=n>stdio_client</span>
+</span></span><span class=line><span class=cl><span class=kn>from</span> <span class=nn>contextlib</span> <span class=kn>import</span> <span class=n>AsyncExitStack</span>
+</span></span><span class=line><span class=cl><span class=kn>import</span> <span class=nn>json</span>
+</span></span><span class=line><span class=cl><span class=kn>import</span> <span class=nn>asyncio</span>
+</span></span><span class=line><span class=cl><span class=kn>import</span> <span class=nn>nest_asyncio</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>nest_asyncio</span><span class=o>.</span><span class=n>apply</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>load_dotenv</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>class</span> <span class=nc>MCP_ChatBot</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=k>def</span> <span class=fm>__init__</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=bp>self</span><span class=o>.</span><span class=n>exit_stack</span> <span class=o>=</span> <span class=n>AsyncExitStack</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=bp>self</span><span class=o>.</span><span class=n>anthropic</span> <span class=o>=</span> <span class=n>Anthropic</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=c1># Tools list required for Anthropic API</span>
+</span></span><span class=line><span class=cl>        <span class=bp>self</span><span class=o>.</span><span class=n>available_tools</span> <span class=o>=</span> <span class=p>[]</span>
+</span></span><span class=line><span class=cl>        <span class=c1># Prompts list for quick display </span>
+</span></span><span class=line><span class=cl>        <span class=bp>self</span><span class=o>.</span><span class=n>available_prompts</span> <span class=o>=</span> <span class=p>[]</span>
+</span></span><span class=line><span class=cl>        <span class=c1># Sessions dict maps tool/prompt names or resource URIs to MCP client sessions</span>
+</span></span><span class=line><span class=cl>        <span class=bp>self</span><span class=o>.</span><span class=n>sessions</span> <span class=o>=</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>async</span> <span class=k>def</span> <span class=nf>connect_to_server</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>server_name</span><span class=p>,</span> <span class=n>server_config</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>server_params</span> <span class=o>=</span> <span class=n>StdioServerParameters</span><span class=p>(</span><span class=o>**</span><span class=n>server_config</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>stdio_transport</span> <span class=o>=</span> <span class=k>await</span> <span class=bp>self</span><span class=o>.</span><span class=n>exit_stack</span><span class=o>.</span><span class=n>enter_async_context</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=n>stdio_client</span><span class=p>(</span><span class=n>server_params</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>read</span><span class=p>,</span> <span class=n>write</span> <span class=o>=</span> <span class=n>stdio_transport</span>
+</span></span><span class=line><span class=cl>            <span class=n>session</span> <span class=o>=</span> <span class=k>await</span> <span class=bp>self</span><span class=o>.</span><span class=n>exit_stack</span><span class=o>.</span><span class=n>enter_async_context</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=n>ClientSession</span><span class=p>(</span><span class=n>read</span><span class=p>,</span> <span class=n>write</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>await</span> <span class=n>session</span><span class=o>.</span><span class=n>initialize</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>            <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=c1># List available tools</span>
+</span></span><span class=line><span class=cl>                <span class=n>response</span> <span class=o>=</span> <span class=k>await</span> <span class=n>session</span><span class=o>.</span><span class=n>list_tools</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>                <span class=k>for</span> <span class=n>tool</span> <span class=ow>in</span> <span class=n>response</span><span class=o>.</span><span class=n>tools</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=bp>self</span><span class=o>.</span><span class=n>sessions</span><span class=p>[</span><span class=n>tool</span><span class=o>.</span><span class=n>name</span><span class=p>]</span> <span class=o>=</span> <span class=n>session</span>
+</span></span><span class=line><span class=cl>                    <span class=bp>self</span><span class=o>.</span><span class=n>available_tools</span><span class=o>.</span><span class=n>append</span><span class=p>({</span>
+</span></span><span class=line><span class=cl>                        <span class=s2>&#34;name&#34;</span><span class=p>:</span> <span class=n>tool</span><span class=o>.</span><span class=n>name</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                        <span class=s2>&#34;description&#34;</span><span class=p>:</span> <span class=n>tool</span><span class=o>.</span><span class=n>description</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                        <span class=s2>&#34;input_schema&#34;</span><span class=p>:</span> <span class=n>tool</span><span class=o>.</span><span class=n>inputSchema</span>
+</span></span><span class=line><span class=cl>                    <span class=p>})</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>                <span class=c1># List available prompts</span>
+</span></span><span class=line><span class=cl>                <span class=n>prompts_response</span> <span class=o>=</span> <span class=k>await</span> <span class=n>session</span><span class=o>.</span><span class=n>list_prompts</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=n>prompts_response</span> <span class=ow>and</span> <span class=n>prompts_response</span><span class=o>.</span><span class=n>prompts</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=k>for</span> <span class=n>prompt</span> <span class=ow>in</span> <span class=n>prompts_response</span><span class=o>.</span><span class=n>prompts</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                        <span class=bp>self</span><span class=o>.</span><span class=n>sessions</span><span class=p>[</span><span class=n>prompt</span><span class=o>.</span><span class=n>name</span><span class=p>]</span> <span class=o>=</span> <span class=n>session</span>
+</span></span><span class=line><span class=cl>                        <span class=bp>self</span><span class=o>.</span><span class=n>available_prompts</span><span class=o>.</span><span class=n>append</span><span class=p>({</span>
+</span></span><span class=line><span class=cl>                            <span class=s2>&#34;name&#34;</span><span class=p>:</span> <span class=n>prompt</span><span class=o>.</span><span class=n>name</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                            <span class=s2>&#34;description&#34;</span><span class=p>:</span> <span class=n>prompt</span><span class=o>.</span><span class=n>description</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                            <span class=s2>&#34;arguments&#34;</span><span class=p>:</span> <span class=n>prompt</span><span class=o>.</span><span class=n>arguments</span>
+</span></span><span class=line><span class=cl>                        <span class=p>})</span>
+</span></span><span class=line><span class=cl>                <span class=c1># List available resources</span>
+</span></span><span class=line><span class=cl>                <span class=n>resources_response</span> <span class=o>=</span> <span class=k>await</span> <span class=n>session</span><span class=o>.</span><span class=n>list_resources</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=n>resources_response</span> <span class=ow>and</span> <span class=n>resources_response</span><span class=o>.</span><span class=n>resources</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=k>for</span> <span class=n>resource</span> <span class=ow>in</span> <span class=n>resources_response</span><span class=o>.</span><span class=n>resources</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                        <span class=n>resource_uri</span> <span class=o>=</span> <span class=nb>str</span><span class=p>(</span><span class=n>resource</span><span class=o>.</span><span class=n>uri</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                        <span class=bp>self</span><span class=o>.</span><span class=n>sessions</span><span class=p>[</span><span class=n>resource_uri</span><span class=p>]</span> <span class=o>=</span> <span class=n>session</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>            <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Error </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Error connecting to </span><span class=si>{</span><span class=n>server_name</span><span class=si>}</span><span class=s2>: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>async</span> <span class=k>def</span> <span class=nf>connect_to_servers</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=k>with</span> <span class=nb>open</span><span class=p>(</span><span class=s2>&#34;server_config.json&#34;</span><span class=p>,</span> <span class=s2>&#34;r&#34;</span><span class=p>)</span> <span class=k>as</span> <span class=n>file</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=n>data</span> <span class=o>=</span> <span class=n>json</span><span class=o>.</span><span class=n>load</span><span class=p>(</span><span class=n>file</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=n>servers</span> <span class=o>=</span> <span class=n>data</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=s2>&#34;mcpServers&#34;</span><span class=p>,</span> <span class=p>{})</span>
+</span></span><span class=line><span class=cl>            <span class=k>for</span> <span class=n>server_name</span><span class=p>,</span> <span class=n>server_config</span> <span class=ow>in</span> <span class=n>servers</span><span class=o>.</span><span class=n>items</span><span class=p>():</span>
+</span></span><span class=line><span class=cl>                <span class=k>await</span> <span class=bp>self</span><span class=o>.</span><span class=n>connect_to_server</span><span class=p>(</span><span class=n>server_name</span><span class=p>,</span> <span class=n>server_config</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Error loading server config: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>raise</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>async</span> <span class=k>def</span> <span class=nf>process_query</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>query</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>messages</span> <span class=o>=</span> <span class=p>[{</span><span class=s1>&#39;role&#39;</span><span class=p>:</span><span class=s1>&#39;user&#39;</span><span class=p>,</span> <span class=s1>&#39;content&#39;</span><span class=p>:</span><span class=n>query</span><span class=p>}]</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>while</span> <span class=kc>True</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>response</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>anthropic</span><span class=o>.</span><span class=n>messages</span><span class=o>.</span><span class=n>create</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>                <span class=n>max_tokens</span> <span class=o>=</span> <span class=mi>2024</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=n>model</span> <span class=o>=</span> <span class=s1>&#39;claude-3-7-sonnet-20250219&#39;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>                <span class=n>tools</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>available_tools</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                <span class=n>messages</span> <span class=o>=</span> <span class=n>messages</span>
+</span></span><span class=line><span class=cl>            <span class=p>)</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>            <span class=n>assistant_content</span> <span class=o>=</span> <span class=p>[]</span>
+</span></span><span class=line><span class=cl>            <span class=n>has_tool_use</span> <span class=o>=</span> <span class=kc>False</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>            <span class=k>for</span> <span class=n>content</span> <span class=ow>in</span> <span class=n>response</span><span class=o>.</span><span class=n>content</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=n>content</span><span class=o>.</span><span class=n>type</span> <span class=o>==</span> <span class=s1>&#39;text&#39;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=nb>print</span><span class=p>(</span><span class=n>content</span><span class=o>.</span><span class=n>text</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    <span class=n>assistant_content</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=n>content</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                <span class=k>elif</span> <span class=n>content</span><span class=o>.</span><span class=n>type</span> <span class=o>==</span> <span class=s1>&#39;tool_use&#39;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=n>has_tool_use</span> <span class=o>=</span> <span class=kc>True</span>
+</span></span><span class=line><span class=cl>                    <span class=n>assistant_content</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=n>content</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    <span class=n>messages</span><span class=o>.</span><span class=n>append</span><span class=p>({</span><span class=s1>&#39;role&#39;</span><span class=p>:</span><span class=s1>&#39;assistant&#39;</span><span class=p>,</span> <span class=s1>&#39;content&#39;</span><span class=p>:</span><span class=n>assistant_content</span><span class=p>})</span>
+</span></span><span class=line><span class=cl>                    
+</span></span><span class=line><span class=cl>                    <span class=c1># Get session and call tool</span>
+</span></span><span class=line><span class=cl>                    <span class=n>session</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>sessions</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>content</span><span class=o>.</span><span class=n>name</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    <span class=k>if</span> <span class=ow>not</span> <span class=n>session</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                        <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Tool &#39;</span><span class=si>{</span><span class=n>content</span><span class=o>.</span><span class=n>name</span><span class=si>}</span><span class=s2>&#39; not found.&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                        <span class=k>break</span>
+</span></span><span class=line><span class=cl>                        
+</span></span><span class=line><span class=cl>                    <span class=n>result</span> <span class=o>=</span> <span class=k>await</span> <span class=n>session</span><span class=o>.</span><span class=n>call_tool</span><span class=p>(</span><span class=n>content</span><span class=o>.</span><span class=n>name</span><span class=p>,</span> <span class=n>arguments</span><span class=o>=</span><span class=n>content</span><span class=o>.</span><span class=n>input</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    <span class=n>messages</span><span class=o>.</span><span class=n>append</span><span class=p>({</span>
+</span></span><span class=line><span class=cl>                        <span class=s2>&#34;role&#34;</span><span class=p>:</span> <span class=s2>&#34;user&#34;</span><span class=p>,</span> 
+</span></span><span class=line><span class=cl>                        <span class=s2>&#34;content&#34;</span><span class=p>:</span> <span class=p>[</span>
+</span></span><span class=line><span class=cl>                            <span class=p>{</span>
+</span></span><span class=line><span class=cl>                                <span class=s2>&#34;type&#34;</span><span class=p>:</span> <span class=s2>&#34;tool_result&#34;</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                                <span class=s2>&#34;tool_use_id&#34;</span><span class=p>:</span> <span class=n>content</span><span class=o>.</span><span class=n>id</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>                                <span class=s2>&#34;content&#34;</span><span class=p>:</span> <span class=n>result</span><span class=o>.</span><span class=n>content</span>
+</span></span><span class=line><span class=cl>                            <span class=p>}</span>
+</span></span><span class=line><span class=cl>                        <span class=p>]</span>
+</span></span><span class=line><span class=cl>                    <span class=p>})</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>            <span class=c1># Exit loop if no tool was used</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=ow>not</span> <span class=n>has_tool_use</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=k>break</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=k>async</span> <span class=k>def</span> <span class=nf>get_resource</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>resource_uri</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>session</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>sessions</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>resource_uri</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1># Fallback for papers URIs - try any papers resource session</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=ow>not</span> <span class=n>session</span> <span class=ow>and</span> <span class=n>resource_uri</span><span class=o>.</span><span class=n>startswith</span><span class=p>(</span><span class=s2>&#34;papers://&#34;</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>            <span class=k>for</span> <span class=n>uri</span><span class=p>,</span> <span class=n>sess</span> <span class=ow>in</span> <span class=bp>self</span><span class=o>.</span><span class=n>sessions</span><span class=o>.</span><span class=n>items</span><span class=p>():</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=n>uri</span><span class=o>.</span><span class=n>startswith</span><span class=p>(</span><span class=s2>&#34;papers://&#34;</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>                    <span class=n>session</span> <span class=o>=</span> <span class=n>sess</span>
+</span></span><span class=line><span class=cl>                    <span class=k>break</span>
+</span></span><span class=line><span class=cl>            
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=ow>not</span> <span class=n>session</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Resource &#39;</span><span class=si>{</span><span class=n>resource_uri</span><span class=si>}</span><span class=s2>&#39; not found.&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>result</span> <span class=o>=</span> <span class=k>await</span> <span class=n>session</span><span class=o>.</span><span class=n>read_resource</span><span class=p>(</span><span class=n>uri</span><span class=o>=</span><span class=n>resource_uri</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=n>result</span> <span class=ow>and</span> <span class=n>result</span><span class=o>.</span><span class=n>contents</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=se>\n</span><span class=s2>Resource: </span><span class=si>{</span><span class=n>resource_uri</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;Content:&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                <span class=nb>print</span><span class=p>(</span><span class=n>result</span><span class=o>.</span><span class=n>contents</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span><span class=o>.</span><span class=n>text</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;No content available.&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Error: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>async</span> <span class=k>def</span> <span class=nf>list_prompts</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=s2>&#34;&#34;&#34;List all available prompts.&#34;&#34;&#34;</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=ow>not</span> <span class=bp>self</span><span class=o>.</span><span class=n>available_prompts</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;No prompts available.&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;</span><span class=se>\n</span><span class=s2>Available prompts:&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>for</span> <span class=n>prompt</span> <span class=ow>in</span> <span class=bp>self</span><span class=o>.</span><span class=n>available_prompts</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;- </span><span class=si>{</span><span class=n>prompt</span><span class=p>[</span><span class=s1>&#39;name&#39;</span><span class=p>]</span><span class=si>}</span><span class=s2>: </span><span class=si>{</span><span class=n>prompt</span><span class=p>[</span><span class=s1>&#39;description&#39;</span><span class=p>]</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=n>prompt</span><span class=p>[</span><span class=s1>&#39;arguments&#39;</span><span class=p>]:</span>
+</span></span><span class=line><span class=cl>                <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;  Arguments:&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                <span class=k>for</span> <span class=n>arg</span> <span class=ow>in</span> <span class=n>prompt</span><span class=p>[</span><span class=s1>&#39;arguments&#39;</span><span class=p>]:</span>
+</span></span><span class=line><span class=cl>                    <span class=n>arg_name</span> <span class=o>=</span> <span class=n>arg</span><span class=o>.</span><span class=n>name</span> <span class=k>if</span> <span class=nb>hasattr</span><span class=p>(</span><span class=n>arg</span><span class=p>,</span> <span class=s1>&#39;name&#39;</span><span class=p>)</span> <span class=k>else</span> <span class=n>arg</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=s1>&#39;name&#39;</span><span class=p>,</span> <span class=s1>&#39;&#39;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;    - </span><span class=si>{</span><span class=n>arg_name</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>async</span> <span class=k>def</span> <span class=nf>execute_prompt</span><span class=p>(</span><span class=bp>self</span><span class=p>,</span> <span class=n>prompt_name</span><span class=p>,</span> <span class=n>args</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=s2>&#34;&#34;&#34;Execute a prompt with the given arguments.&#34;&#34;&#34;</span>
+</span></span><span class=line><span class=cl>        <span class=n>session</span> <span class=o>=</span> <span class=bp>self</span><span class=o>.</span><span class=n>sessions</span><span class=o>.</span><span class=n>get</span><span class=p>(</span><span class=n>prompt_name</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=ow>not</span> <span class=n>session</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Prompt &#39;</span><span class=si>{</span><span class=n>prompt_name</span><span class=si>}</span><span class=s2>&#39; not found.&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>return</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>result</span> <span class=o>=</span> <span class=k>await</span> <span class=n>session</span><span class=o>.</span><span class=n>get_prompt</span><span class=p>(</span><span class=n>prompt_name</span><span class=p>,</span> <span class=n>arguments</span><span class=o>=</span><span class=n>args</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=n>result</span> <span class=ow>and</span> <span class=n>result</span><span class=o>.</span><span class=n>messages</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=n>prompt_content</span> <span class=o>=</span> <span class=n>result</span><span class=o>.</span><span class=n>messages</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span><span class=o>.</span><span class=n>content</span>
+</span></span><span class=line><span class=cl>                
+</span></span><span class=line><span class=cl>                <span class=c1># Extract text from content (handles different formats)</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=nb>isinstance</span><span class=p>(</span><span class=n>prompt_content</span><span class=p>,</span> <span class=nb>str</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>                    <span class=n>text</span> <span class=o>=</span> <span class=n>prompt_content</span>
+</span></span><span class=line><span class=cl>                <span class=k>elif</span> <span class=nb>hasattr</span><span class=p>(</span><span class=n>prompt_content</span><span class=p>,</span> <span class=s1>&#39;text&#39;</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>                    <span class=n>text</span> <span class=o>=</span> <span class=n>prompt_content</span><span class=o>.</span><span class=n>text</span>
+</span></span><span class=line><span class=cl>                <span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=c1># Handle list of content items</span>
+</span></span><span class=line><span class=cl>                    <span class=n>text</span> <span class=o>=</span> <span class=s2>&#34; &#34;</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>item</span><span class=o>.</span><span class=n>text</span> <span class=k>if</span> <span class=nb>hasattr</span><span class=p>(</span><span class=n>item</span><span class=p>,</span> <span class=s1>&#39;text&#39;</span><span class=p>)</span> <span class=k>else</span> <span class=nb>str</span><span class=p>(</span><span class=n>item</span><span class=p>)</span> 
+</span></span><span class=line><span class=cl>                                  <span class=k>for</span> <span class=n>item</span> <span class=ow>in</span> <span class=n>prompt_content</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                
+</span></span><span class=line><span class=cl>                <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=se>\n</span><span class=s2>Executing prompt &#39;</span><span class=si>{</span><span class=n>prompt_name</span><span class=si>}</span><span class=s2>&#39;...&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                <span class=k>await</span> <span class=bp>self</span><span class=o>.</span><span class=n>process_query</span><span class=p>(</span><span class=n>text</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Error: </span><span class=si>{</span><span class=n>e</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>async</span> <span class=k>def</span> <span class=nf>chat_loop</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;</span><span class=se>\n</span><span class=s2>MCP Chatbot Started!&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;Type your queries or &#39;quit&#39; to exit.&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;Use @folders to see available topics&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;Use @&lt;topic&gt; to search papers in that topic&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;Use /prompts to list available prompts&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;Use /prompt &lt;name&gt; &lt;arg1=value1&gt; to execute a prompt&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>while</span> <span class=kc>True</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=n>query</span> <span class=o>=</span> <span class=nb>input</span><span class=p>(</span><span class=s2>&#34;</span><span class=se>\n</span><span class=s2>Query: &#34;</span><span class=p>)</span><span class=o>.</span><span class=n>strip</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=ow>not</span> <span class=n>query</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=k>continue</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=n>query</span><span class=o>.</span><span class=n>lower</span><span class=p>()</span> <span class=o>==</span> <span class=s1>&#39;quit&#39;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=k>break</span>
+</span></span><span class=line><span class=cl>                
+</span></span><span class=line><span class=cl>                <span class=c1># Check for @resource syntax first</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=n>query</span><span class=o>.</span><span class=n>startswith</span><span class=p>(</span><span class=s1>&#39;@&#39;</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>                    <span class=c1># Remove @ sign  </span>
+</span></span><span class=line><span class=cl>                    <span class=n>topic</span> <span class=o>=</span> <span class=n>query</span><span class=p>[</span><span class=mi>1</span><span class=p>:]</span>
+</span></span><span class=line><span class=cl>                    <span class=k>if</span> <span class=n>topic</span> <span class=o>==</span> <span class=s2>&#34;folders&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                        <span class=n>resource_uri</span> <span class=o>=</span> <span class=s2>&#34;papers://folders&#34;</span>
+</span></span><span class=line><span class=cl>                    <span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                        <span class=n>resource_uri</span> <span class=o>=</span> <span class=sa>f</span><span class=s2>&#34;papers://</span><span class=si>{</span><span class=n>topic</span><span class=si>}</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>                    <span class=k>await</span> <span class=bp>self</span><span class=o>.</span><span class=n>get_resource</span><span class=p>(</span><span class=n>resource_uri</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    <span class=k>continue</span>
+</span></span><span class=line><span class=cl>                
+</span></span><span class=line><span class=cl>                <span class=c1># Check for /command syntax</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=n>query</span><span class=o>.</span><span class=n>startswith</span><span class=p>(</span><span class=s1>&#39;/&#39;</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>                    <span class=n>parts</span> <span class=o>=</span> <span class=n>query</span><span class=o>.</span><span class=n>split</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>                    <span class=n>command</span> <span class=o>=</span> <span class=n>parts</span><span class=p>[</span><span class=mi>0</span><span class=p>]</span><span class=o>.</span><span class=n>lower</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>                    
+</span></span><span class=line><span class=cl>                    <span class=k>if</span> <span class=n>command</span> <span class=o>==</span> <span class=s1>&#39;/prompts&#39;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                        <span class=k>await</span> <span class=bp>self</span><span class=o>.</span><span class=n>list_prompts</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>                    <span class=k>elif</span> <span class=n>command</span> <span class=o>==</span> <span class=s1>&#39;/prompt&#39;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                        <span class=k>if</span> <span class=nb>len</span><span class=p>(</span><span class=n>parts</span><span class=p>)</span> <span class=o>&lt;</span> <span class=mi>2</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                            <span class=nb>print</span><span class=p>(</span><span class=s2>&#34;Usage: /prompt &lt;name&gt; &lt;arg1=value1&gt; &lt;arg2=value2&gt;&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                            <span class=k>continue</span>
+</span></span><span class=line><span class=cl>                        
+</span></span><span class=line><span class=cl>                        <span class=n>prompt_name</span> <span class=o>=</span> <span class=n>parts</span><span class=p>[</span><span class=mi>1</span><span class=p>]</span>
+</span></span><span class=line><span class=cl>                        <span class=n>args</span> <span class=o>=</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>                        
+</span></span><span class=line><span class=cl>                        <span class=c1># Parse arguments</span>
+</span></span><span class=line><span class=cl>                        <span class=k>for</span> <span class=n>arg</span> <span class=ow>in</span> <span class=n>parts</span><span class=p>[</span><span class=mi>2</span><span class=p>:]:</span>
+</span></span><span class=line><span class=cl>                            <span class=k>if</span> <span class=s1>&#39;=&#39;</span> <span class=ow>in</span> <span class=n>arg</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                                <span class=n>key</span><span class=p>,</span> <span class=n>value</span> <span class=o>=</span> <span class=n>arg</span><span class=o>.</span><span class=n>split</span><span class=p>(</span><span class=s1>&#39;=&#39;</span><span class=p>,</span> <span class=mi>1</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                                <span class=n>args</span><span class=p>[</span><span class=n>key</span><span class=p>]</span> <span class=o>=</span> <span class=n>value</span>
+</span></span><span class=line><span class=cl>                        
+</span></span><span class=line><span class=cl>                        <span class=k>await</span> <span class=bp>self</span><span class=o>.</span><span class=n>execute_prompt</span><span class=p>(</span><span class=n>prompt_name</span><span class=p>,</span> <span class=n>args</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    <span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                        <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Unknown command: </span><span class=si>{</span><span class=n>command</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    <span class=k>continue</span>
+</span></span><span class=line><span class=cl>                
+</span></span><span class=line><span class=cl>                <span class=k>await</span> <span class=bp>self</span><span class=o>.</span><span class=n>process_query</span><span class=p>(</span><span class=n>query</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    
+</span></span><span class=line><span class=cl>            <span class=k>except</span> <span class=ne>Exception</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;</span><span class=se>\n</span><span class=s2>Error: </span><span class=si>{</span><span class=nb>str</span><span class=p>(</span><span class=n>e</span><span class=p>)</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>async</span> <span class=k>def</span> <span class=nf>cleanup</span><span class=p>(</span><span class=bp>self</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>await</span> <span class=bp>self</span><span class=o>.</span><span class=n>exit_stack</span><span class=o>.</span><span class=n>aclose</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>async</span> <span class=k>def</span> <span class=nf>main</span><span class=p>():</span>
+</span></span><span class=line><span class=cl>    <span class=n>chatbot</span> <span class=o>=</span> <span class=n>MCP_ChatBot</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=k>await</span> <span class=n>chatbot</span><span class=o>.</span><span class=n>connect_to_servers</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>        <span class=k>await</span> <span class=n>chatbot</span><span class=o>.</span><span class=n>chat_loop</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>    <span class=k>finally</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=k>await</span> <span class=n>chatbot</span><span class=o>.</span><span class=n>cleanup</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>if</span> <span class=vm>__name__</span> <span class=o>==</span> <span class=s2>&#34;__main__&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=n>asyncio</span><span class=o>.</span><span class=n>run</span><span class=p>(</span><span class=n>main</span><span class=p>())</span>
+</span></span></code></pre></div><h3 id=sse-remote-server-source-code>SSE Remote Server Source Code<a hidden class=anchor aria-hidden=true href=#sse-remote-server-source-code>#</a></h3><div class=highlight><pre tabindex=0 class=chroma><code class=language-python data-lang=python><span class=line><span class=cl><span class=kn>import</span> <span class=nn>arxiv</span>
+</span></span><span class=line><span class=cl><span class=kn>import</span> <span class=nn>json</span>
+</span></span><span class=line><span class=cl><span class=kn>import</span> <span class=nn>os</span>
+</span></span><span class=line><span class=cl><span class=kn>from</span> <span class=nn>typing</span> <span class=kn>import</span> <span class=n>List</span>
+</span></span><span class=line><span class=cl><span class=kn>from</span> <span class=nn>mcp.server.fastmcp</span> <span class=kn>import</span> <span class=n>FastMCP</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=n>PAPER_DIR</span> <span class=o>=</span> <span class=s2>&#34;papers&#34;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=c1># Initialize FastMCP server</span>
+</span></span><span class=line><span class=cl><span class=n>mcp</span> <span class=o>=</span> <span class=n>FastMCP</span><span class=p>(</span><span class=s2>&#34;research&#34;</span><span class=p>,</span> <span class=n>port</span><span class=o>=</span><span class=mi>8001</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nd>@mcp.tool</span><span class=p>()</span>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>search_papers</span><span class=p>(</span><span class=n>topic</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span> <span class=n>max_results</span><span class=p>:</span> <span class=nb>int</span> <span class=o>=</span> <span class=mi>5</span><span class=p>)</span> <span class=o>-&gt;</span> <span class=n>List</span><span class=p>[</span><span class=nb>str</span><span class=p>]:</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;&#34;&#34;
+</span></span></span><span class=line><span class=cl><span class=s2>    Search for papers on arXiv based on a topic and store their information.
+</span></span></span><span class=line><span class=cl><span class=s2>    
+</span></span></span><span class=line><span class=cl><span class=s2>    Args:
+</span></span></span><span class=line><span class=cl><span class=s2>        topic: The topic to search for
+</span></span></span><span class=line><span class=cl><span class=s2>        max_results: Maximum number of results to retrieve (default: 5)
+</span></span></span><span class=line><span class=cl><span class=s2>        
+</span></span></span><span class=line><span class=cl><span class=s2>    Returns:
+</span></span></span><span class=line><span class=cl><span class=s2>        List of paper IDs found in the search
+</span></span></span><span class=line><span class=cl><span class=s2>    &#34;&#34;&#34;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1># Use arxiv to find the papers </span>
+</span></span><span class=line><span class=cl>    <span class=n>client</span> <span class=o>=</span> <span class=n>arxiv</span><span class=o>.</span><span class=n>Client</span><span class=p>()</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=c1># Search for the most relevant articles matching the queried topic</span>
+</span></span><span class=line><span class=cl>    <span class=n>search</span> <span class=o>=</span> <span class=n>arxiv</span><span class=o>.</span><span class=n>Search</span><span class=p>(</span>
+</span></span><span class=line><span class=cl>        <span class=n>query</span> <span class=o>=</span> <span class=n>topic</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=n>max_results</span> <span class=o>=</span> <span class=n>max_results</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>        <span class=n>sort_by</span> <span class=o>=</span> <span class=n>arxiv</span><span class=o>.</span><span class=n>SortCriterion</span><span class=o>.</span><span class=n>Relevance</span>
+</span></span><span class=line><span class=cl>    <span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=n>papers</span> <span class=o>=</span> <span class=n>client</span><span class=o>.</span><span class=n>results</span><span class=p>(</span><span class=n>search</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1># Create directory for this topic</span>
+</span></span><span class=line><span class=cl>    <span class=n>path</span> <span class=o>=</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>PAPER_DIR</span><span class=p>,</span> <span class=n>topic</span><span class=o>.</span><span class=n>lower</span><span class=p>()</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=s2>&#34; &#34;</span><span class=p>,</span> <span class=s2>&#34;_&#34;</span><span class=p>))</span>
+</span></span><span class=line><span class=cl>    <span class=n>os</span><span class=o>.</span><span class=n>makedirs</span><span class=p>(</span><span class=n>path</span><span class=p>,</span> <span class=n>exist_ok</span><span class=o>=</span><span class=kc>True</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=n>file_path</span> <span class=o>=</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>path</span><span class=p>,</span> <span class=s2>&#34;papers_info.json&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=c1># Try to load existing papers info</span>
+</span></span><span class=line><span class=cl>    <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=k>with</span> <span class=nb>open</span><span class=p>(</span><span class=n>file_path</span><span class=p>,</span> <span class=s2>&#34;r&#34;</span><span class=p>)</span> <span class=k>as</span> <span class=n>json_file</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>papers_info</span> <span class=o>=</span> <span class=n>json</span><span class=o>.</span><span class=n>load</span><span class=p>(</span><span class=n>json_file</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=k>except</span> <span class=p>(</span><span class=ne>FileNotFoundError</span><span class=p>,</span> <span class=n>json</span><span class=o>.</span><span class=n>JSONDecodeError</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>papers_info</span> <span class=o>=</span> <span class=p>{}</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>    <span class=c1># Process each paper and add to papers_info  </span>
+</span></span><span class=line><span class=cl>    <span class=n>paper_ids</span> <span class=o>=</span> <span class=p>[]</span>
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=n>paper</span> <span class=ow>in</span> <span class=n>papers</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=n>paper_ids</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=n>paper</span><span class=o>.</span><span class=n>get_short_id</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>        <span class=n>paper_info</span> <span class=o>=</span> <span class=p>{</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;title&#39;</span><span class=p>:</span> <span class=n>paper</span><span class=o>.</span><span class=n>title</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;authors&#39;</span><span class=p>:</span> <span class=p>[</span><span class=n>author</span><span class=o>.</span><span class=n>name</span> <span class=k>for</span> <span class=n>author</span> <span class=ow>in</span> <span class=n>paper</span><span class=o>.</span><span class=n>authors</span><span class=p>],</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;summary&#39;</span><span class=p>:</span> <span class=n>paper</span><span class=o>.</span><span class=n>summary</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;pdf_url&#39;</span><span class=p>:</span> <span class=n>paper</span><span class=o>.</span><span class=n>pdf_url</span><span class=p>,</span>
+</span></span><span class=line><span class=cl>            <span class=s1>&#39;published&#39;</span><span class=p>:</span> <span class=nb>str</span><span class=p>(</span><span class=n>paper</span><span class=o>.</span><span class=n>published</span><span class=o>.</span><span class=n>date</span><span class=p>())</span>
+</span></span><span class=line><span class=cl>        <span class=p>}</span>
+</span></span><span class=line><span class=cl>        <span class=n>papers_info</span><span class=p>[</span><span class=n>paper</span><span class=o>.</span><span class=n>get_short_id</span><span class=p>()]</span> <span class=o>=</span> <span class=n>paper_info</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1># Save updated papers_info to json file</span>
+</span></span><span class=line><span class=cl>    <span class=k>with</span> <span class=nb>open</span><span class=p>(</span><span class=n>file_path</span><span class=p>,</span> <span class=s2>&#34;w&#34;</span><span class=p>)</span> <span class=k>as</span> <span class=n>json_file</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=n>json</span><span class=o>.</span><span class=n>dump</span><span class=p>(</span><span class=n>papers_info</span><span class=p>,</span> <span class=n>json_file</span><span class=p>,</span> <span class=n>indent</span><span class=o>=</span><span class=mi>2</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Results are saved in: </span><span class=si>{</span><span class=n>file_path</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>paper_ids</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nd>@mcp.tool</span><span class=p>()</span>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>extract_info</span><span class=p>(</span><span class=n>paper_id</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-&gt;</span> <span class=nb>str</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;&#34;&#34;
+</span></span></span><span class=line><span class=cl><span class=s2>    Search for information about a specific paper across all topic directories.
+</span></span></span><span class=line><span class=cl><span class=s2>    
+</span></span></span><span class=line><span class=cl><span class=s2>    Args:
+</span></span></span><span class=line><span class=cl><span class=s2>        paper_id: The ID of the paper to look for
+</span></span></span><span class=line><span class=cl><span class=s2>        
+</span></span></span><span class=line><span class=cl><span class=s2>    Returns:
+</span></span></span><span class=line><span class=cl><span class=s2>        JSON string with paper information if found, error message if not found
+</span></span></span><span class=line><span class=cl><span class=s2>    &#34;&#34;&#34;</span>
+</span></span><span class=line><span class=cl> 
+</span></span><span class=line><span class=cl>    <span class=k>for</span> <span class=n>item</span> <span class=ow>in</span> <span class=n>os</span><span class=o>.</span><span class=n>listdir</span><span class=p>(</span><span class=n>PAPER_DIR</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=n>item_path</span> <span class=o>=</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>PAPER_DIR</span><span class=p>,</span> <span class=n>item</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        <span class=k>if</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>isdir</span><span class=p>(</span><span class=n>item_path</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>            <span class=n>file_path</span> <span class=o>=</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>item_path</span><span class=p>,</span> <span class=s2>&#34;papers_info.json&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>isfile</span><span class=p>(</span><span class=n>file_path</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>                <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=k>with</span> <span class=nb>open</span><span class=p>(</span><span class=n>file_path</span><span class=p>,</span> <span class=s2>&#34;r&#34;</span><span class=p>)</span> <span class=k>as</span> <span class=n>json_file</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                        <span class=n>papers_info</span> <span class=o>=</span> <span class=n>json</span><span class=o>.</span><span class=n>load</span><span class=p>(</span><span class=n>json_file</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                        <span class=k>if</span> <span class=n>paper_id</span> <span class=ow>in</span> <span class=n>papers_info</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                            <span class=k>return</span> <span class=n>json</span><span class=o>.</span><span class=n>dumps</span><span class=p>(</span><span class=n>papers_info</span><span class=p>[</span><span class=n>paper_id</span><span class=p>],</span> <span class=n>indent</span><span class=o>=</span><span class=mi>2</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                <span class=k>except</span> <span class=p>(</span><span class=ne>FileNotFoundError</span><span class=p>,</span> <span class=n>json</span><span class=o>.</span><span class=n>JSONDecodeError</span><span class=p>)</span> <span class=k>as</span> <span class=n>e</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>                    <span class=nb>print</span><span class=p>(</span><span class=sa>f</span><span class=s2>&#34;Error reading </span><span class=si>{</span><span class=n>file_path</span><span class=si>}</span><span class=s2>: </span><span class=si>{</span><span class=nb>str</span><span class=p>(</span><span class=n>e</span><span class=p>)</span><span class=si>}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                    <span class=k>continue</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=sa>f</span><span class=s2>&#34;There&#39;s no saved information related to paper </span><span class=si>{</span><span class=n>paper_id</span><span class=si>}</span><span class=s2>.&#34;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nd>@mcp.resource</span><span class=p>(</span><span class=s2>&#34;papers://folders&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>get_available_folders</span><span class=p>()</span> <span class=o>-&gt;</span> <span class=nb>str</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;&#34;&#34;
+</span></span></span><span class=line><span class=cl><span class=s2>    List all available topic folders in the papers directory.
+</span></span></span><span class=line><span class=cl><span class=s2>    
+</span></span></span><span class=line><span class=cl><span class=s2>    This resource provides a simple list of all available topic folders.
+</span></span></span><span class=line><span class=cl><span class=s2>    &#34;&#34;&#34;</span>
+</span></span><span class=line><span class=cl>    <span class=n>folders</span> <span class=o>=</span> <span class=p>[]</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1># Get all topic directories</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>exists</span><span class=p>(</span><span class=n>PAPER_DIR</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>for</span> <span class=n>topic_dir</span> <span class=ow>in</span> <span class=n>os</span><span class=o>.</span><span class=n>listdir</span><span class=p>(</span><span class=n>PAPER_DIR</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>            <span class=n>topic_path</span> <span class=o>=</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>PAPER_DIR</span><span class=p>,</span> <span class=n>topic_dir</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>            <span class=k>if</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>isdir</span><span class=p>(</span><span class=n>topic_path</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>                <span class=n>papers_file</span> <span class=o>=</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>topic_path</span><span class=p>,</span> <span class=s2>&#34;papers_info.json&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>                <span class=k>if</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>exists</span><span class=p>(</span><span class=n>papers_file</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>                    <span class=n>folders</span><span class=o>.</span><span class=n>append</span><span class=p>(</span><span class=n>topic_dir</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=c1># Create a simple markdown list</span>
+</span></span><span class=line><span class=cl>    <span class=n>content</span> <span class=o>=</span> <span class=s2>&#34;# Available Topics</span><span class=se>\n\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=n>folders</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=k>for</span> <span class=n>folder</span> <span class=ow>in</span> <span class=n>folders</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>content</span> <span class=o>+=</span> <span class=sa>f</span><span class=s2>&#34;- </span><span class=si>{</span><span class=n>folder</span><span class=si>}</span><span class=se>\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>        <span class=n>content</span> <span class=o>+=</span> <span class=sa>f</span><span class=s2>&#34;</span><span class=se>\n</span><span class=s2>Use @</span><span class=si>{</span><span class=n>folder</span><span class=si>}</span><span class=s2> to access papers in that topic.</span><span class=se>\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>    <span class=k>else</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=n>content</span> <span class=o>+=</span> <span class=s2>&#34;No topics found.</span><span class=se>\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=n>content</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nd>@mcp.resource</span><span class=p>(</span><span class=s2>&#34;papers://</span><span class=si>{topic}</span><span class=s2>&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>get_topic_papers</span><span class=p>(</span><span class=n>topic</span><span class=p>:</span> <span class=nb>str</span><span class=p>)</span> <span class=o>-&gt;</span> <span class=nb>str</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;&#34;&#34;
+</span></span></span><span class=line><span class=cl><span class=s2>    Get detailed information about papers on a specific topic.
+</span></span></span><span class=line><span class=cl><span class=s2>    
+</span></span></span><span class=line><span class=cl><span class=s2>    Args:
+</span></span></span><span class=line><span class=cl><span class=s2>        topic: The research topic to retrieve papers for
+</span></span></span><span class=line><span class=cl><span class=s2>    &#34;&#34;&#34;</span>
+</span></span><span class=line><span class=cl>    <span class=n>topic_dir</span> <span class=o>=</span> <span class=n>topic</span><span class=o>.</span><span class=n>lower</span><span class=p>()</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=s2>&#34; &#34;</span><span class=p>,</span> <span class=s2>&#34;_&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    <span class=n>papers_file</span> <span class=o>=</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>PAPER_DIR</span><span class=p>,</span> <span class=n>topic_dir</span><span class=p>,</span> <span class=s2>&#34;papers_info.json&#34;</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>if</span> <span class=ow>not</span> <span class=n>os</span><span class=o>.</span><span class=n>path</span><span class=o>.</span><span class=n>exists</span><span class=p>(</span><span class=n>papers_file</span><span class=p>):</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=sa>f</span><span class=s2>&#34;# No papers found for topic: </span><span class=si>{</span><span class=n>topic</span><span class=si>}</span><span class=se>\n\n</span><span class=s2>Try searching for papers on this topic first.&#34;</span>
+</span></span><span class=line><span class=cl>    
+</span></span><span class=line><span class=cl>    <span class=k>try</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=k>with</span> <span class=nb>open</span><span class=p>(</span><span class=n>papers_file</span><span class=p>,</span> <span class=s1>&#39;r&#39;</span><span class=p>)</span> <span class=k>as</span> <span class=n>f</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>            <span class=n>papers_data</span> <span class=o>=</span> <span class=n>json</span><span class=o>.</span><span class=n>load</span><span class=p>(</span><span class=n>f</span><span class=p>)</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=c1># Create markdown content with paper details</span>
+</span></span><span class=line><span class=cl>        <span class=n>content</span> <span class=o>=</span> <span class=sa>f</span><span class=s2>&#34;# Papers on </span><span class=si>{</span><span class=n>topic</span><span class=o>.</span><span class=n>replace</span><span class=p>(</span><span class=s1>&#39;_&#39;</span><span class=p>,</span> <span class=s1>&#39; &#39;</span><span class=p>)</span><span class=o>.</span><span class=n>title</span><span class=p>()</span><span class=si>}</span><span class=se>\n\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>        <span class=n>content</span> <span class=o>+=</span> <span class=sa>f</span><span class=s2>&#34;Total papers: </span><span class=si>{</span><span class=nb>len</span><span class=p>(</span><span class=n>papers_data</span><span class=p>)</span><span class=si>}</span><span class=se>\n\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>for</span> <span class=n>paper_id</span><span class=p>,</span> <span class=n>paper_info</span> <span class=ow>in</span> <span class=n>papers_data</span><span class=o>.</span><span class=n>items</span><span class=p>():</span>
+</span></span><span class=line><span class=cl>            <span class=n>content</span> <span class=o>+=</span> <span class=sa>f</span><span class=s2>&#34;## </span><span class=si>{</span><span class=n>paper_info</span><span class=p>[</span><span class=s1>&#39;title&#39;</span><span class=p>]</span><span class=si>}</span><span class=se>\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>            <span class=n>content</span> <span class=o>+=</span> <span class=sa>f</span><span class=s2>&#34;- **Paper ID**: </span><span class=si>{</span><span class=n>paper_id</span><span class=si>}</span><span class=se>\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>            <span class=n>content</span> <span class=o>+=</span> <span class=sa>f</span><span class=s2>&#34;- **Authors**: </span><span class=si>{</span><span class=s1>&#39;, &#39;</span><span class=o>.</span><span class=n>join</span><span class=p>(</span><span class=n>paper_info</span><span class=p>[</span><span class=s1>&#39;authors&#39;</span><span class=p>])</span><span class=si>}</span><span class=se>\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>            <span class=n>content</span> <span class=o>+=</span> <span class=sa>f</span><span class=s2>&#34;- **Published**: </span><span class=si>{</span><span class=n>paper_info</span><span class=p>[</span><span class=s1>&#39;published&#39;</span><span class=p>]</span><span class=si>}</span><span class=se>\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>            <span class=n>content</span> <span class=o>+=</span> <span class=sa>f</span><span class=s2>&#34;- **PDF URL**: [</span><span class=si>{</span><span class=n>paper_info</span><span class=p>[</span><span class=s1>&#39;pdf_url&#39;</span><span class=p>]</span><span class=si>}</span><span class=s2>](</span><span class=si>{</span><span class=n>paper_info</span><span class=p>[</span><span class=s1>&#39;pdf_url&#39;</span><span class=p>]</span><span class=si>}</span><span class=s2>)</span><span class=se>\n\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>            <span class=n>content</span> <span class=o>+=</span> <span class=sa>f</span><span class=s2>&#34;### Summary</span><span class=se>\n</span><span class=si>{</span><span class=n>paper_info</span><span class=p>[</span><span class=s1>&#39;summary&#39;</span><span class=p>][:</span><span class=mi>500</span><span class=p>]</span><span class=si>}</span><span class=s2>...</span><span class=se>\n\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>            <span class=n>content</span> <span class=o>+=</span> <span class=s2>&#34;---</span><span class=se>\n\n</span><span class=s2>&#34;</span>
+</span></span><span class=line><span class=cl>        
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=n>content</span>
+</span></span><span class=line><span class=cl>    <span class=k>except</span> <span class=n>json</span><span class=o>.</span><span class=n>JSONDecodeError</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>        <span class=k>return</span> <span class=sa>f</span><span class=s2>&#34;# Error reading papers data for </span><span class=si>{</span><span class=n>topic</span><span class=si>}</span><span class=se>\n\n</span><span class=s2>The papers data file is corrupted.&#34;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=nd>@mcp.prompt</span><span class=p>()</span>
+</span></span><span class=line><span class=cl><span class=k>def</span> <span class=nf>generate_search_prompt</span><span class=p>(</span><span class=n>topic</span><span class=p>:</span> <span class=nb>str</span><span class=p>,</span> <span class=n>num_papers</span><span class=p>:</span> <span class=nb>int</span> <span class=o>=</span> <span class=mi>5</span><span class=p>)</span> <span class=o>-&gt;</span> <span class=nb>str</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=s2>&#34;&#34;&#34;Generate a prompt for Claude to find and discuss academic papers on a specific topic.&#34;&#34;&#34;</span>
+</span></span><span class=line><span class=cl>    <span class=k>return</span> <span class=sa>f</span><span class=s2>&#34;&#34;&#34;Search for </span><span class=si>{</span><span class=n>num_papers</span><span class=si>}</span><span class=s2> academic papers about &#39;</span><span class=si>{</span><span class=n>topic</span><span class=si>}</span><span class=s2>&#39; using the search_papers tool. 
+</span></span></span><span class=line><span class=cl><span class=s2>
+</span></span></span><span class=line><span class=cl><span class=s2>    Follow these instructions:
+</span></span></span><span class=line><span class=cl><span class=s2>    1. First, search for papers using search_papers(topic=&#39;</span><span class=si>{</span><span class=n>topic</span><span class=si>}</span><span class=s2>&#39;, max_results=</span><span class=si>{</span><span class=n>num_papers</span><span class=si>}</span><span class=s2>)
+</span></span></span><span class=line><span class=cl><span class=s2>    2. For each paper found, extract and organize the following information:
+</span></span></span><span class=line><span class=cl><span class=s2>       - Paper title
+</span></span></span><span class=line><span class=cl><span class=s2>       - Authors
+</span></span></span><span class=line><span class=cl><span class=s2>       - Publication date
+</span></span></span><span class=line><span class=cl><span class=s2>       - Brief summary of the key findings
+</span></span></span><span class=line><span class=cl><span class=s2>       - Main contributions or innovations
+</span></span></span><span class=line><span class=cl><span class=s2>       - Methodologies used
+</span></span></span><span class=line><span class=cl><span class=s2>       - Relevance to the topic &#39;</span><span class=si>{</span><span class=n>topic</span><span class=si>}</span><span class=s2>&#39;
+</span></span></span><span class=line><span class=cl><span class=s2>    
+</span></span></span><span class=line><span class=cl><span class=s2>    3. Provide a comprehensive summary that includes:
+</span></span></span><span class=line><span class=cl><span class=s2>       - Overview of the current state of research in &#39;</span><span class=si>{</span><span class=n>topic</span><span class=si>}</span><span class=s2>&#39;
+</span></span></span><span class=line><span class=cl><span class=s2>       - Common themes and trends across the papers
+</span></span></span><span class=line><span class=cl><span class=s2>       - Key research gaps or areas for future investigation
+</span></span></span><span class=line><span class=cl><span class=s2>       - Most impactful or influential papers in this area
+</span></span></span><span class=line><span class=cl><span class=s2>    
+</span></span></span><span class=line><span class=cl><span class=s2>    4. Organize your findings in a clear, structured format with headings and bullet points for easy readability.
+</span></span></span><span class=line><span class=cl><span class=s2>    
+</span></span></span><span class=line><span class=cl><span class=s2>    Please present both detailed information about each paper and a high-level synthesis of the research landscape in </span><span class=si>{</span><span class=n>topic</span><span class=si>}</span><span class=s2>.&#34;&#34;&#34;</span>
+</span></span><span class=line><span class=cl>
+</span></span><span class=line><span class=cl><span class=k>if</span> <span class=vm>__name__</span> <span class=o>==</span> <span class=s2>&#34;__main__&#34;</span><span class=p>:</span>
+</span></span><span class=line><span class=cl>    <span class=c1># Initialize and run the server</span>
+</span></span><span class=line><span class=cl>    <span class=n>mcp</span><span class=o>.</span><span class=n>run</span><span class=p>(</span><span class=n>transport</span><span class=o>=</span><span class=s1>&#39;sse&#39;</span><span class=p>)</span>
+</span></span></code></pre></div><h2 id=reference>Reference<a hidden class=anchor aria-hidden=true href=#reference>#</a></h2><p><a href=https://learn.deeplearning.ai/courses/mcp-build-rich-context-ai-apps-with-anthropic>DeepLearning.AI - MCP: Build Rich-Context AI Apps with Anthropic</a></p><p><a href=https://modelcontextprotocol.io/docs>MCP official documentation</a></p></div><footer class=post-footer><ul class=post-tags><li><a href=https://dexter1636.github.io/tags/mcp/>MCP</a></li><li><a href=https://dexter1636.github.io/tags/ai/>AI</a></li></ul><nav class=paginav><a class=next href=https://dexter1636.github.io/posts/nontech/notes-on-harvard-positive-psychology/><span class=title>Next »</span><br><span>Notes on Harvard Positive Psychology</span></a></nav><ul class=share-buttons><li><a target=_blank rel="noopener noreferrer" aria-label="share MCP: Build Rich-Context AI Apps with Anthropic on x" href="https://x.com/intent/tweet/?text=MCP%3a%20Build%20Rich-Context%20AI%20Apps%20with%20Anthropic&amp;url=https%3a%2f%2fdexter1636.github.io%2fposts%2faicourses%2fmcp-build-rich-context-ai-apps-with-anthropic%2f&amp;hashtags=MCP%2cAI"><svg viewBox="0 0 512 512" height="30" width="30" fill="currentColor"><path d="M512 62.554V449.446C512 483.97 483.97 512 449.446 512H62.554C28.03 512 0 483.97.0 449.446V62.554C0 28.03 28.029.0 62.554.0H449.446C483.971.0 512 28.03 512 62.554zM269.951 190.75 182.567 75.216H56L207.216 272.95 63.9 436.783h61.366L235.9 310.383l96.667 126.4H456L298.367 228.367l134-153.151H371.033zM127.633 110h36.468l219.38 290.065H349.5z"/></svg></a></li><li><a target=_blank rel="noopener noreferrer" aria-label="share MCP: Build Rich-Context AI Apps with Anthropic on linkedin" href="https://www.linkedin.com/shareArticle?mini=true&amp;url=https%3a%2f%2fdexter1636.github.io%2fposts%2faicourses%2fmcp-build-rich-context-ai-apps-with-anthropic%2f&amp;title=MCP%3a%20Build%20Rich-Context%20AI%20Apps%20with%20Anthropic&amp;summary=MCP%3a%20Build%20Rich-Context%20AI%20Apps%20with%20Anthropic&amp;source=https%3a%2f%2fdexter1636.github.io%2fposts%2faicourses%2fmcp-build-rich-context-ai-apps-with-anthropic%2f"><svg viewBox="0 0 512 512" height="30" width="30" fill="currentColor"><path d="M449.446.0C483.971.0 512 28.03 512 62.554v386.892C512 483.97 483.97 512 449.446 512H62.554c-34.524.0-62.554-28.03-62.554-62.554V62.554c0-34.524 28.029-62.554 62.554-62.554h386.892zM160.461 423.278V197.561h-75.04v225.717h75.04zm270.539.0V293.839c0-69.333-37.018-101.586-86.381-101.586-39.804.0-57.634 21.891-67.617 37.266v-31.958h-75.021c.995 21.181.0 225.717.0 225.717h75.02V297.222c0-6.748.486-13.492 2.474-18.315 5.414-13.475 17.767-27.434 38.494-27.434 27.135.0 38.007 20.707 38.007 51.037v120.768H431zM123.448 88.722C97.774 88.722 81 105.601 81 127.724c0 21.658 16.264 39.002 41.455 39.002h.484c26.165.0 42.452-17.344 42.452-39.002-.485-22.092-16.241-38.954-41.943-39.002z"/></svg></a></li><li><a target=_blank rel="noopener noreferrer" aria-label="share MCP: Build Rich-Context AI Apps with Anthropic on reddit" href="https://reddit.com/submit?url=https%3a%2f%2fdexter1636.github.io%2fposts%2faicourses%2fmcp-build-rich-context-ai-apps-with-anthropic%2f&title=MCP%3a%20Build%20Rich-Context%20AI%20Apps%20with%20Anthropic"><svg viewBox="0 0 512 512" height="30" width="30" fill="currentColor"><path d="M449.446.0C483.971.0 512 28.03 512 62.554v386.892C512 483.97 483.97 512 449.446 512H62.554c-34.524.0-62.554-28.03-62.554-62.554V62.554c0-34.524 28.029-62.554 62.554-62.554h386.892zM446 265.638c0-22.964-18.616-41.58-41.58-41.58-11.211.0-21.361 4.457-28.841 11.666-28.424-20.508-67.586-33.757-111.204-35.278l18.941-89.121 61.884 13.157c.756 15.734 13.642 28.29 29.56 28.29 16.407.0 29.706-13.299 29.706-29.701.0-16.403-13.299-29.702-29.706-29.702-11.666.0-21.657 6.792-26.515 16.578l-69.105-14.69c-1.922-.418-3.939-.042-5.585 1.036-1.658 1.073-2.811 2.761-3.224 4.686l-21.152 99.438c-44.258 1.228-84.046 14.494-112.837 35.232-7.468-7.164-17.589-11.591-28.757-11.591-22.965.0-41.585 18.616-41.585 41.58.0 16.896 10.095 31.41 24.568 37.918-.639 4.135-.99 8.328-.99 12.576.0 63.977 74.469 115.836 166.33 115.836s166.334-51.859 166.334-115.836c0-4.218-.347-8.387-.977-12.493 14.564-6.47 24.735-21.034 24.735-38.001zM326.526 373.831c-20.27 20.241-59.115 21.816-70.534 21.816-11.428.0-50.277-1.575-70.522-21.82-3.007-3.008-3.007-7.882.0-10.889 3.003-2.999 7.882-3.003 10.885.0 12.777 12.781 40.11 17.317 59.637 17.317 19.522.0 46.86-4.536 59.657-17.321 3.016-2.999 7.886-2.995 10.885.008 3.008 3.011 3.003 7.882-.008 10.889zm-5.23-48.781c-16.373.0-29.701-13.324-29.701-29.698.0-16.381 13.328-29.714 29.701-29.714 16.378.0 29.706 13.333 29.706 29.714.0 16.374-13.328 29.698-29.706 29.698zM160.91 295.348c0-16.381 13.328-29.71 29.714-29.71 16.369.0 29.689 13.329 29.689 29.71.0 16.373-13.32 29.693-29.689 29.693-16.386.0-29.714-13.32-29.714-29.693z"/></svg></a></li><li><a target=_blank rel="noopener noreferrer" aria-label="share MCP: Build Rich-Context AI Apps with Anthropic on facebook" href="https://facebook.com/sharer/sharer.php?u=https%3a%2f%2fdexter1636.github.io%2fposts%2faicourses%2fmcp-build-rich-context-ai-apps-with-anthropic%2f"><svg viewBox="0 0 512 512" height="30" width="30" fill="currentColor"><path d="M449.446.0C483.971.0 512 28.03 512 62.554v386.892C512 483.97 483.97 512 449.446 512H342.978V319.085h66.6l12.672-82.621h-79.272v-53.617c0-22.603 11.073-44.636 46.58-44.636H425.6v-70.34s-32.71-5.582-63.982-5.582c-65.288.0-107.96 39.569-107.96 111.204v62.971h-72.573v82.621h72.573V512h-191.104c-34.524.0-62.554-28.03-62.554-62.554V62.554c0-34.524 28.029-62.554 62.554-62.554h386.892z"/></svg></a></li><li><a target=_blank rel="noopener noreferrer" aria-label="share MCP: Build Rich-Context AI Apps with Anthropic on whatsapp" href="https://api.whatsapp.com/send?text=MCP%3a%20Build%20Rich-Context%20AI%20Apps%20with%20Anthropic%20-%20https%3a%2f%2fdexter1636.github.io%2fposts%2faicourses%2fmcp-build-rich-context-ai-apps-with-anthropic%2f"><svg viewBox="0 0 512 512" height="30" width="30" fill="currentColor"><path d="M449.446.0C483.971.0 512 28.03 512 62.554v386.892C512 483.97 483.97 512 449.446 512H62.554c-34.524.0-62.554-28.03-62.554-62.554V62.554c0-34.524 28.029-62.554 62.554-62.554h386.892zm-58.673 127.703c-33.842-33.881-78.847-52.548-126.798-52.568-98.799.0-179.21 80.405-179.249 179.234-.013 31.593 8.241 62.428 23.927 89.612l-25.429 92.884 95.021-24.925c26.181 14.28 55.659 21.807 85.658 21.816h.074c98.789.0 179.206-80.413 179.247-179.243.018-47.895-18.61-92.93-52.451-126.81zM263.976 403.485h-.06c-26.734-.01-52.954-7.193-75.828-20.767l-5.441-3.229-56.386 14.792 15.05-54.977-3.542-5.637c-14.913-23.72-22.791-51.136-22.779-79.287.033-82.142 66.867-148.971 149.046-148.971 39.793.014 77.199 15.531 105.329 43.692 28.128 28.16 43.609 65.592 43.594 105.4-.034 82.149-66.866 148.983-148.983 148.984zm81.721-111.581c-4.479-2.242-26.499-13.075-30.604-14.571-4.105-1.495-7.091-2.241-10.077 2.241-2.986 4.483-11.569 14.572-14.182 17.562-2.612 2.988-5.225 3.364-9.703 1.12-4.479-2.241-18.91-6.97-36.017-22.23C231.8 264.15 222.81 249.484 220.198 245s-.279-6.908 1.963-9.14c2.016-2.007 4.48-5.232 6.719-7.847 2.24-2.615 2.986-4.484 4.479-7.472 1.493-2.99.747-5.604-.374-7.846-1.119-2.241-10.077-24.288-13.809-33.256-3.635-8.733-7.327-7.55-10.077-7.688-2.609-.13-5.598-.158-8.583-.158-2.986.0-7.839 1.121-11.944 5.604-4.105 4.484-15.675 15.32-15.675 37.364.0 22.046 16.048 43.342 18.287 46.332 2.24 2.99 31.582 48.227 76.511 67.627 10.685 4.615 19.028 7.371 25.533 9.434 10.728 3.41 20.492 2.929 28.209 1.775 8.605-1.285 26.499-10.833 30.231-21.295 3.732-10.464 3.732-19.431 2.612-21.298-1.119-1.869-4.105-2.99-8.583-5.232z"/></svg></a></li><li><a target=_blank rel="noopener noreferrer" aria-label="share MCP: Build Rich-Context AI Apps with Anthropic on telegram" href="https://telegram.me/share/url?text=MCP%3a%20Build%20Rich-Context%20AI%20Apps%20with%20Anthropic&amp;url=https%3a%2f%2fdexter1636.github.io%2fposts%2faicourses%2fmcp-build-rich-context-ai-apps-with-anthropic%2f"><svg viewBox="2 2 28 28" height="30" width="30" fill="currentColor"><path d="M26.49 29.86H5.5a3.37 3.37.0 01-2.47-1 3.35 3.35.0 01-1-2.47V5.48A3.36 3.36.0 013 3 3.37 3.37.0 015.5 2h21A3.38 3.38.0 0129 3a3.36 3.36.0 011 2.46V26.37a3.35 3.35.0 01-1 2.47 3.38 3.38.0 01-2.51 1.02zm-5.38-6.71a.79.79.0 00.85-.66L24.73 9.24a.55.55.0 00-.18-.46.62.62.0 00-.41-.17q-.08.0-16.53 6.11a.59.59.0 00-.41.59.57.57.0 00.43.52l4 1.24 1.61 4.83a.62.62.0 00.63.43.56.56.0 00.4-.17L16.54 20l4.09 3A.9.9.0 0021.11 23.15zM13.8 20.71l-1.21-4q8.72-5.55 8.78-5.55c.15.0.23.0.23.16a.18.18.0 010 .06s-2.51 2.3-7.52 6.8z"/></svg></a></li><li><a target=_blank rel="noopener noreferrer" aria-label="share MCP: Build Rich-Context AI Apps with Anthropic on ycombinator" href="https://news.ycombinator.com/submitlink?t=MCP%3a%20Build%20Rich-Context%20AI%20Apps%20with%20Anthropic&u=https%3a%2f%2fdexter1636.github.io%2fposts%2faicourses%2fmcp-build-rich-context-ai-apps-with-anthropic%2f"><svg width="30" height="30" viewBox="0 0 512 512" fill="currentColor"><path d="M449.446.0C483.971.0 512 28.03 512 62.554V449.446C512 483.97 483.97 512 449.446 512H62.554C28.03 512 0 483.97.0 449.446V62.554C0 28.03 28.029.0 62.554.0H449.446zM183.8767 87.9921h-62.034L230.6673 292.4508V424.0079h50.6655V292.4508L390.1575 87.9921H328.1233L256 238.2489z"/></svg></a></li></ul></footer></article></main><footer class=footer><span>© 2025 <a href=https://github.com/Dexter1636>Dexter</a> · <a href=https://creativecommons.org/licenses/by-nc/4.0/>CC BY-NC 4.0</a></span> ·
+<span>Powered by
+<a href=https://gohugo.io/ rel="noopener noreferrer" target=_blank>Hugo</a> &
+<a href=https://github.com/adityatelange/hugo-PaperMod/ rel=noopener target=_blank>PaperMod</a></span></footer><a href=#top aria-label="go to top" title="Go to Top (Alt + G)" class=top-link id=top-link accesskey=g><svg viewBox="0 0 12 6" fill="currentColor"><path d="M12 6H0l6-6z"/></svg>
+</a><script>let menu=document.getElementById("menu");menu&&(menu.scrollLeft=localStorage.getItem("menu-scroll-position"),menu.onscroll=function(){localStorage.setItem("menu-scroll-position",menu.scrollLeft)}),document.querySelectorAll('a[href^="#"]').forEach(e=>{e.addEventListener("click",function(e){e.preventDefault();var t=this.getAttribute("href").substr(1);window.matchMedia("(prefers-reduced-motion: reduce)").matches?document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView():document.querySelector(`[id='${decodeURIComponent(t)}']`).scrollIntoView({behavior:"smooth"}),t==="top"?history.replaceState(null,null," "):history.pushState(null,null,`#${t}`)})})</script><script>var mybutton=document.getElementById("top-link");window.onscroll=function(){document.body.scrollTop>800||document.documentElement.scrollTop>800?(mybutton.style.visibility="visible",mybutton.style.opacity="1"):(mybutton.style.visibility="hidden",mybutton.style.opacity="0")}</script><script>document.getElementById("theme-toggle").addEventListener("click",()=>{document.body.className.includes("dark")?(document.body.classList.remove("dark"),localStorage.setItem("pref-theme","light")):(document.body.classList.add("dark"),localStorage.setItem("pref-theme","dark"))})</script><script>document.querySelectorAll("pre > code").forEach(e=>{const n=e.parentNode.parentNode,t=document.createElement("button");t.classList.add("copy-code"),t.innerHTML="copy";function s(){t.innerHTML="copied!",setTimeout(()=>{t.innerHTML="copy"},2e3)}t.addEventListener("click",t=>{if("clipboard"in navigator){navigator.clipboard.writeText(e.textContent),s();return}const n=document.createRange();n.selectNodeContents(e);const o=window.getSelection();o.removeAllRanges(),o.addRange(n);try{document.execCommand("copy"),s()}catch{}o.removeRange(n)}),n.classList.contains("highlight")?n.appendChild(t):n.parentNode.firstChild==n||(e.parentNode.parentNode.parentNode.parentNode.parentNode.nodeName=="TABLE"?e.parentNode.parentNode.parentNode.parentNode.parentNode.appendChild(t):e.parentNode.appendChild(t))})</script></body></html>
