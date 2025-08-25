@@ -1,23 +1,17 @@
-title = "从JDK8升级到JDK11后的SNI问题"
-description = ""
-math = false
-type = ["posts","post"]
-tags = [
-    "development",
-    "troubleshooting",
-    "jdk11",
-    "network"
-]
-date = 2023-12-09
-categories = [
-    "Development",
-    "Troubleshooting"
-]
-series = []
-[ author ]
-  name = "Dexter"
-
-+++
+---
+author: "Dexter"
+title: "从JDK8升级到JDK11后的SNI问题"
+date: "2023-12-09"
+description: ""
+draft: true
+math: false
+tags: ["development", "troubleshooting", "jdk11", "network"]
+categories: ["Development", "Troubleshooting"]
+series: []
+ShowToc: true
+TocOpen: false
+ShowBreadCrumbs: false
+---
 
 
 

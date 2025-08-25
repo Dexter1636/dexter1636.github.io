@@ -1,10 +1,9 @@
-+++
-title = "About"
-aliases = ["about-me","contact"]
-[ author ]
-  name = "Dexter"
+---
+author: "Dexter"
+title: "About"
+---
 
-+++
+
 
 Coder.
 

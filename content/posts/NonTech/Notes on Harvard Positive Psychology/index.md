@@ -1,21 +1,17 @@
-+++
-title = "Notes on Harvard Positive Psychology"
-description = ""
-draft = false
-math = false
-type = ["posts","post"]
-tags = [
-    "happiness"
-]
-date = 2022-06-19
-categories = [
-    "NonTech"
-]
-series = []
-[ author ]
-  name = "Dexter"
-
-+++
+---
+author: "Dexter"
+title: "Notes on Harvard Positive Psychology"
+date: "2022-06-19"
+description: ""
+draft: false
+math: false
+tags: ["happiness"]
+categories: ["NonTech"]
+series: []
+ShowToc: true
+TocOpen: false
+ShowBreadCrumbs: false
+---
 
 
 

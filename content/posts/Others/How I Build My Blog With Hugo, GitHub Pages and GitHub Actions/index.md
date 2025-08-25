@@ -1,21 +1,19 @@
-+++
-title = "How I Build My Blog With Hugo, GitHub Pages and GitHub Actions"
-description = ""
-math = false
-type = ["posts","post"]
-tags = [
-    "development",
-    "personal website"
-]
-date = 2022-01-12
-categories = [
-    "Development",
-]
-series = []
-[ author ]
-  name = "Dexter"
+---
+author: "Dexter"
+title: "How I Build My Blog With Hugo, GitHub Pages and GitHub Actions"
+date: "2022-01-12"
+description: ""
+draft: false
+math: false
+tags: ["development", "personal website"]
+categories: ["Development"]
+series: []
+ShowToc: true
+TocOpen: false
+ShowBreadCrumbs: false
+---
 
-+++
+
 
 This blog is about how I build my blog. The blog is built with Hugo and hosted in GitHub Pages.
 
@@ -160,5 +158,6 @@ After that, the GitHub action will push the generated content to the `gh-pages` 
 
 - [Hugo](https://gohugo.io/)
 - [Build a Personal Website With Github Pages and Hugo](https://levelup.gitconnected.com/build-a-personal-website-with-github-pages-and-hugo-6c68592204c7)
+- [初始化 & 设置 PaperMod 主题的基础功能](https://aikenh.cn/posts/%E5%88%9D%E5%A7%8B%E5%8C%96%E8%AE%BE%E7%BD%AEpapermod%E4%B8%BB%E9%A2%98%E7%9A%84%E5%9F%BA%E7%A1%80%E5%8A%9F%E8%83%BD/)
 - [在Hugo中使用MathJax](https://note.qidong.name/2018/03/hugo-mathjax/)
 - [A Github Actions Workflow to Generate & Publish your Hugo Website](https://medium.com/zendesk-engineering/a-github-actions-workflow-to-generate-publish-your-hugo-website-f36375e56cf7)

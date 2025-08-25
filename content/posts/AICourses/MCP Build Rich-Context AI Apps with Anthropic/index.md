@@ -1,21 +1,17 @@
-+++
-title = "MCP: Build Rich-Context AI Apps with Anthropic"
-description = ""
-draft = false
-math = false
-type = ["posts","post"]
-tags = [
-    "MCP"
-]
-date = 2025-08-23
-categories = [
-    "AI Courses"
-]
-series = []
-[ author ]
-  name = "Dexter"
-
-+++
+---
+author: "Dexter"
+title: "MCP: Build Rich-Context AI Apps with Anthropic"
+date: "2025-08-23"
+description: ""
+draft: false
+math: false
+tags: ["MCP", "AI"]
+categories: ["AI Courses"]
+series: []
+ShowToc: true
+TocOpen: false
+ShowBreadCrumbs: false
+---
 
 
 

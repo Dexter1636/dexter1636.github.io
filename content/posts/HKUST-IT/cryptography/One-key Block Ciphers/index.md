@@ -1,23 +1,17 @@
-+++
-title = "One-key Block Ciphers"
-description = ""
-math = true
-type = ["posts","post"]
-tags = [
-    "cryptography",
-    "web security",
-    "computer science",
-]
-date = "2021-12-27"
-categories = [
-    "Computer Science",
-    "HKUST-IT",
-    "cryptography",
-]
-series = ["CSIT5710"]
-[ author ]
-  name = "Dexter"
-+++
+---
+author: "Dexter"
+title: "One-key Block Ciphers"
+date: "2021-12-27"
+description: ""
+draft: false
+math: true
+tags: ["cryptography", "web security", "computer science"]
+categories: ["Computer Science", "HKUST-IT", "cryptography"]
+series: ["CSIT5710"]
+ShowToc: true
+TocOpen: false
+ShowBreadCrumbs: false
+---
 
 A 5-tuple $(M,C,K,E_k,D_k)$, where
 

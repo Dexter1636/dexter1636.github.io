@@ -1,24 +1,19 @@
-+++
-title = "数据库事务"
-description = ""
-math = false
-type = ["posts","post"]
-tags = [
-    "transaction",
-    "database",
-    "computer science",
-]
-date = 2022-02-05
-categories = [
-    "Computer Science",
-    "Database",
-    "Transaction",
-]
-series = []
-[ author ]
-  name = "Dexter"
+---
+author: "Dexter"
+title: "数据库事务"
+date: "2022-02-05"
+description: ""
+draft: false
+math: false
+tags: ["transaction", "database", "computer science"]
+categories: ["Computer Science", "Database"]
+series: []
+ShowToc: true
+TocOpen: false
+ShowBreadCrumbs: false
+---
 
-+++
+
 
 ## 目录
 

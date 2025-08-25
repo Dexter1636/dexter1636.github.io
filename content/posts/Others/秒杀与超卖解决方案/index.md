@@ -1,23 +1,19 @@
-+++
-title = "秒杀系统设计-超卖问题解决方案"
-description = ""
-draft = true
-math = false
-type = ["posts","post"]
-tags = [
-    "system design",
-    "development",
-]
-date = 2022-02-08
-categories = [
-    "Development",
-    "System Design",
-]
-series = []
-[ author ]
-  name = "Dexter"
+---
+author: "Dexter"
+title: "秒杀系统设计-超卖问题解决方案"
+date: "2022-02-08"
+description: ""
+draft: true
+math: false
+tags: ["system design", "development"]
+categories: ["Development", "System Design"]
+series: []
+ShowToc: true
+TocOpen: false
+ShowBreadCrumbs: false
+---
 
-+++
+
 
 秒杀系统在数据层面最大的问题就是超卖问题。
 
